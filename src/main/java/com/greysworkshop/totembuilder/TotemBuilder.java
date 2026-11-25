@@ -39,8 +39,8 @@ public final class TotemBuilder implements ClientModInitializer {
 	@Override
 	public void onInitializeClient() {
 		KeyBinding.Category category = KeyBinding.Category.create(Identifier.of(ID, "main"));
-		printKey = KeyBindingHelper.registerKeyBinding(new KeyBinding("key.totembuilder.print", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_KP_8, category));
-		planKey = KeyBindingHelper.registerKeyBinding(new KeyBinding("key.totembuilder.plan", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_KP_9, category));
+		printKey = KeyBindingHelper.registerKeyBinding(new KeyBinding("key.totembuilder.print", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_UNKNOWN, category));
+		planKey = KeyBindingHelper.registerKeyBinding(new KeyBinding("key.totembuilder.plan", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_UNKNOWN, category));
 		ClientTickEvents.END_CLIENT_TICK.register(TotemBuilder::tick);
 		WorldRenderEvents.BEFORE_DEBUG_RENDER.register(Render::render);
 		HudElementRegistry.addLast(Identifier.of(ID, "hud"), Hud::render);
@@ -103,7 +103,7 @@ public final class TotemBuilder implements ClientModInitializer {
 
 	static void togglePrinting(MinecraftClient client) {
 		if (farm == null) {
-			say(client, Text.literal("No farm planned yet. Fly to your spot over the ocean and press Numpad 9 (or /totem here).").formatted(Formatting.YELLOW));
+			say(client, Text.literal("No farm planned yet. Fly to your spot over the ocean, open Totem Builder in Mod Menu and press Plan the farm here.").formatted(Formatting.YELLOW));
 			return;
 		}
 		printing = !printing;

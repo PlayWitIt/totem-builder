@@ -29,12 +29,12 @@ for a while; the screen tells you when that happens and where (see below).
 
 ## Building it
 
-1. Fly out over open ocean, at least 107 blocks from any land, island or building, and press **Numpad 9** (or
+1. Fly out over open ocean, at least 107 blocks from any land, island or building, and press **Plan the farm here** in the Mod Menu screen (or
    `/totem here`). The villager's bed goes right under you; the floor sits on the sea and the pad 105 blocks up.
 2. It checks for land straight away: anything within 107 blocks that a raider could spawn on would steal the raids. It
    lists what it found (red lines in the world) or says the spot is good. Columns that aren't loaded yet are counted;
    fly round and `/totem check` again.
-3. Press **Numpad 8** to start the printer. Fly round the farm: every missing block within reach is placed, nearest
+3. Press **Printer** in the Mod Menu screen to start it. Fly round the farm: every missing block within reach is placed, nearest
    first, from anywhere in your inventory. The first block goes into thin air (nothing else is there over the sea);
    after that everything is placed against a neighbour. The bed is placed facing the right way, the fence gates are
    placed and opened, and the water goes in last, once every block is in, one source at a time.
@@ -65,8 +65,8 @@ Once the farm is built and the villager sealed in, nothing shows on screen unles
 `/totem here` · `/totem check` · `/totem print` · `/totem materials` · `/totem villager` · `/totem status` ·
 `/totem speed 1-8` (blocks a tick, 2 by default) · `/totem forget`
 
-Keys: **Numpad 8** printer on/off, **Numpad 9** plan the farm here (or the status once it's planned). Change them in
-Controls.
+No keys by default: everything is on the **Mod Menu → Totem Builder → Config** screen (plan here, printer on/off,
+check the spot, materials, villager spot, forget). Two unbound keys exist in Controls if you ever want them.
 
 ## Tests
 

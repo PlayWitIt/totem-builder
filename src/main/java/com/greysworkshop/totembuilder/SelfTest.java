@@ -115,8 +115,14 @@ final class SelfTest {
 					command(client, "tp @p 8.5 70 8.5");
 					fly(client);
 				}
+				if (tick == 100) client.setScreen(new TotemScreen(null));
+				if (tick == 110 && client.currentScreen instanceof TotemScreen ts) {
+					// Plan from the Mod Menu screen's own button, as you would.
+					for (var child : ts.children())
+						if (child instanceof net.minecraft.client.gui.widget.ButtonWidget b && b.getMessage().getString().startsWith("Plan the farm here")) b.onPress(null);
+				}
 				if (tick == 120) {
-					TotemBuilder.planHere(client);
+					check("the Totem Builder screen's Plan button planned the farm", TotemBuilder.farm != null && client.currentScreen == null);
 					check("planned with the floor on the sea (bed y " + TotemBuilder.farm.bed.getY() + ", sea " + client.world.getSeaLevel() + ")",
 							TotemBuilder.farm.bed.getY() == client.world.getSeaLevel() - FarmPlan.FLOOR_Y && TotemBuilder.farm.bed.getX() == 8);
 					// This flat world's "sea" is in its ground: build high up instead, far above it, like over deep ocean.
@@ -177,7 +183,13 @@ final class SelfTest {
 				}
 			}
 			case "print" -> {
+				if (since == 10) client.setScreen(new TotemScreen(null));
 				if (since == 20) {
+					// The printer goes on from the screen's button too.
+					if (client.currentScreen instanceof TotemScreen ts)
+						for (var child : ts.children())
+							if (child instanceof net.minecraft.client.gui.widget.ButtonWidget b && b.getMessage().getString().startsWith("Printer: OFF")) b.onPress(null);
+					check("the screen's Printer button turned the printer on", TotemBuilder.printing);
 					TotemBuilder.printing = true;
 					TotemBuilder.perTick = 2;
 				}

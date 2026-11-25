@@ -8,7 +8,8 @@
 	"license": "MIT",
 	"environment": "client",
 	"entrypoints": {
-		"client": ["com.greysworkshop.totembuilder.TotemBuilder"]
+		"client": ["com.greysworkshop.totembuilder.TotemBuilder"],
+		"modmenu": ["com.greysworkshop.totembuilder.ModMenuIntegration"]
 	},
 	"depends": {
 		"fabricloader": ">=0.18.0",

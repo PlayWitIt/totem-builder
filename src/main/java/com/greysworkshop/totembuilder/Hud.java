@@ -69,7 +69,7 @@ final class Hud {
 		String stuck = Stuck.line(client, farm);
 		Text head = Text.literal("Totem farm ").formatted(Formatting.GOLD)
 				.append(Text.literal((total - left) + "/" + total).formatted(left == 0 ? Formatting.GREEN : Formatting.WHITE))
-				.append(Text.literal(TotemBuilder.printing ? "  printer on" : "  printer off (Numpad 8)").formatted(TotemBuilder.printing ? Formatting.GREEN : Formatting.GRAY));
+				.append(Text.literal(TotemBuilder.printing ? "  printer on" : "  printer off (Mod Menu)").formatted(TotemBuilder.printing ? Formatting.GREEN : Formatting.GRAY));
 		lines.add(head);
 		boolean onlyEntrance = left > 0 && left <= FarmPlan.ENTRANCE.length && nearest == null;
 		if (left == 0 && farm.sealed || onlyEntrance && farm.sealed) {
