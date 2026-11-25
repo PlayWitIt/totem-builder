@@ -46,7 +46,7 @@ final class Commands {
 
 	static void help(MinecraftClient client) {
 		TotemBuilder.say(client, Text.literal("/totem here: plan the farm where you are (villager's bed under you, floor on the sea) · "
-				+ "/totem check: look for land in range · /totem print (Numpad 8): printer on/off · /totem materials · "
+				+ "/totem check: look for land in range · /totem print: printer on/off (or the Mod Menu screen) · /totem materials · "
 				+ "/totem villager: where it goes · /totem status · /totem speed 1-8 · /totem forget"));
 	}
 
