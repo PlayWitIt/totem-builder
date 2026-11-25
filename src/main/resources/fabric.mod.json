@@ -1,0 +1,19 @@
+{
+	"schemaVersion": 1,
+	"id": "totembuilder",
+	"version": "${version}",
+	"name": "Totem Builder",
+	"description": "Builds a raid farm for totems of undying over the ocean while you fly around it. Plan it where you stand, it checks there is no land in range, shows what's missing and places every block within reach. Shows exactly where the villager goes. Client-side only.",
+	"authors": ["PlayWit Creations"],
+	"license": "MIT",
+	"environment": "client",
+	"entrypoints": {
+		"client": ["com.greysworkshop.totembuilder.TotemBuilder"]
+	},
+	"depends": {
+		"fabricloader": ">=0.18.0",
+		"minecraft": "~1.21.11",
+		"java": ">=21",
+		"fabric-api": "*"
+	}
+}

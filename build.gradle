@@ -1,0 +1,79 @@
+plugins {
+	id 'fabric-loom' version "${loom_version}"
+}
+
+version = "${project.mod_version}+${project.minecraft_version}"
+group = project.maven_group
+
+base {
+	archivesName = project.archives_base_name
+}
+
+repositories {
+	mavenCentral()
+}
+
+dependencies {
+	minecraft "com.mojang:minecraft:${project.minecraft_version}"
+	mappings "net.fabricmc:yarn:${project.yarn_mappings}:v2"
+	modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
+	modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
+}
+
+processResources {
+	inputs.property "version", project.version
+	filesMatching("fabric.mod.json") {
+		expand "version": inputs.properties.version
+	}
+}
+
+tasks.withType(JavaCompile).configureEach {
+	it.options.release = 21
+}
+
+java {
+	sourceCompatibility = JavaVersion.VERSION_21
+	targetCompatibility = JavaVersion.VERSION_21
+}
+
+// The scripted tests are for development only.
+jar {
+	exclude 'com/greysworkshop/totembuilder/RaidTest*'
+	exclude 'com/greysworkshop/totembuilder/SelfTest*'
+}
+
+loom {
+	runs {
+		// Real raids on the farm, built straight into the world: ./gradlew runRaidTest -PtbRaids=3
+		raidTest {
+			client()
+			name = "Raid Test"
+			vmArgs "-Dtotembuilder.raidtest=true", "-Dtotembuilder.climbtest=${findProperty("tbClimb") ?: false}", "-Dtotembuilder.raids=${findProperty('tbRaids') ?: 3}",
+					"-Dtotembuilder.design=${findProperty('tbDesign') ?: 'main'}", "-Xmx1536m"
+			runDir "run"
+		}
+		// The printer builds the whole farm in survival while flying, then real raids run on what it built.
+		selfTest {
+			client()
+			name = "Self Test"
+			vmArgs "-Dtotembuilder.selftest=true", "-Dtotembuilder.wateronly=${findProperty("tbWater") ?: false}", "-Xmx1536m"
+			runDir "run"
+		}
+	}
+}
+
+dependencies {
+	testImplementation "net.fabricmc:fabric-loader-junit:${project.loader_version}"
+	testImplementation "org.junit.jupiter:junit-jupiter:5.10.2"
+	testRuntimeOnly "org.junit.platform:junit-platform-launcher"
+}
+
+test {
+	useJUnitPlatform()
+	maxHeapSize = "1g"
+	testLogging {
+		events "failed"
+		exceptionFormat "full"
+		showStandardStreams = true
+	}
+}
