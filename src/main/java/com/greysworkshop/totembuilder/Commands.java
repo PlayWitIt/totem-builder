@@ -19,7 +19,9 @@ final class Commands {
 
 	static void register(CommandDispatcher<FabricClientCommandSource> d) {
 		d.register(literal("totem")
-				.executes(c -> run(Commands::help))
+				// Just /totem: the screen with every button. Client commands never go to the server or its chat.
+				.executes(c -> run(client -> client.setScreen(new TotemScreen(null))))
+				.then(literal("help").executes(c -> run(Commands::help)))
 				.then(literal("here").executes(c -> run(TotemBuilder::planHere)))
 				.then(literal("check").executes(c -> run(TotemBuilder::runCheck)))
 				.then(literal("print").executes(c -> run(TotemBuilder::togglePrinting)))

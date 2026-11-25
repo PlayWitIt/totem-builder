@@ -46,6 +46,17 @@ final class SelfTest {
 	private static String phase = "setup";
 	private static BlockPos lastHop;
 	private static boolean raidSeen;
+	private static boolean serverSawTotem;
+
+	/** Did the server's command dispatcher see a /totem? It has no such command, so it would log "Unknown command". */
+	private static boolean serverGotCommand(MinecraftClient client) {
+		try {
+			return java.nio.file.Files.readAllLines(client.runDirectory.toPath().resolve("logs/latest.log")).stream()
+					.anyMatch(l -> l.contains("Unknown or incomplete command") || l.contains("issued server command: /totem"));
+		} catch (java.io.IOException e) {
+			return false;
+		}
+	}
 	private static BlockPos lastTarget;
 	private static int lastPlaced = -1, lastProgress;
 
@@ -114,6 +125,18 @@ final class SelfTest {
 						command(client, "gamerule " + rule);
 					command(client, "tp @p 8.5 70 8.5");
 					fly(client);
+				}
+				if (tick == 60) {
+					// Watch what reaches the server: /totem must never get there.
+					net.fabricmc.fabric.api.message.v1.ServerMessageEvents.COMMAND_MESSAGE.register((m, src, params) -> serverSawTotem = true);
+					client.player.networkHandler.sendChatCommand("totem");
+				}
+				if (tick == 90) {
+					check("typing /totem opens the screen", client.currentScreen instanceof TotemScreen);
+					boolean[] seen = {false};
+					client.player.networkHandler.sendChatCommand("totem materials");
+					check("/totem never reaches the server", !serverSawTotem && !serverGotCommand(client));
+					client.setScreen(null);
 				}
 				if (tick == 100) client.setScreen(new TotemScreen(null));
 				if (tick == 110 && client.currentScreen instanceof TotemScreen ts) {
