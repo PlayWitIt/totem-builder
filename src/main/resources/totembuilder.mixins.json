@@ -1,0 +1,7 @@
+{
+	"required": true,
+	"package": "com.greysworkshop.totembuilder.mixin",
+	"compatibilityLevel": "JAVA_21",
+	"client": ["SendLook"],
+	"injectors": {"defaultRequire": 1}
+}

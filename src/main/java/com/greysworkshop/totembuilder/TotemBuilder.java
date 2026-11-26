@@ -31,7 +31,8 @@ public final class TotemBuilder implements ClientModInitializer {
 	static SiteCheck check;
 	static final Printer printer = new Printer();
 	static boolean printing;
-	static int perTick = 2;
+	/** Blocks a second. 5 is what holding right-click does; servers with anti-cheat kick for much more. */
+	static int perSecond = 5;
 	private static String loadedFor;
 	private static boolean villagerSeen;
 	static KeyBinding printKey, planKey;
@@ -47,6 +48,7 @@ public final class TotemBuilder implements ClientModInitializer {
 		ClientCommandRegistrationCallback.EVENT.register((dispatcher, access) -> Commands.register(dispatcher));
 		ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> client.execute(() -> {
 			AutoBuild.stop(client, null);
+			printer.stop();
 			printing = false;
 			farm = null;
 			check = null;
@@ -83,6 +85,7 @@ public final class TotemBuilder implements ClientModInitializer {
 		}
 		Render.tick(client);
 		if (farm == null) {
+			printer.stop();
 			AutoBuild.tick(client);
 			return;
 		}
@@ -92,7 +95,8 @@ public final class TotemBuilder implements ClientModInitializer {
 				say(client, Text.literal("Villager is in its room. Wait for green sparkles over it (it has claimed the bed), then the printer fills the entrance.").formatted(Formatting.GREEN));
 			}
 		}
-		if (printing) printer.tick(client, farm, perTick);
+		if (printing) printer.tick(client, farm, perSecond);
+		else printer.stop();
 		AutoBuild.tick(client);
 		if (!farm.sealed && villagerSeen && Printer.villagerInside(client.world, farm) && entranceFilled(client)) {
 			farm.sealed = true;
