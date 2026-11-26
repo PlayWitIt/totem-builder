@@ -90,6 +90,10 @@ final class AutoBuild {
 		if (p == null || world == null || !active()) return;
 		ticks++;
 		pilot.tick(client);
+		if (pilot.gaveUp() && state != State.BUILD) {
+			stop(client, "Couldn't find a way through from here. Move a little, then /totem auto again.");
+			return;
+		}
 		switch (state) {
 			case SEARCH -> search(client, p, world);
 			case TO_SPOT -> {
@@ -171,6 +175,14 @@ final class AutoBuild {
 		skip.values().removeIf(t -> ticks - t > 20 * 30);
 		// Still placing here, or on the way somewhere: let it be.
 		if (ticks - lastProgress < 10) return;
+		if (pilot.gaveUp()) {
+			// No way through to that one for now: leave it a while and go for another.
+			TotemBuilder.LOGGER.info("[auto] no way to {}, trying another", goingFor);
+			if (goingFor != null) skip.put(goingFor, ticks);
+			pilot.stop(client);
+			goingFor = null;
+			arrivedAt = -1;
+		}
 		if (pilot.active() && !pilot.arrived(client)) return;
 		if (goingFor != null && pilot.arrived(client)) {
 			if (arrivedAt < 0) arrivedAt = ticks;

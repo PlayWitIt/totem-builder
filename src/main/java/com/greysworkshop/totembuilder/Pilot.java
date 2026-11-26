@@ -25,8 +25,16 @@ final class Pilot {
 	private static final float MAX_TURN = 25;
 	private Vec3d target;
 	private final List<Vec3d> path = new ArrayList<>();
-	private Vec3d lastPos;
-	private int stillTicks, ticks, takeoff = -1;
+	private int ticks, takeoff = -1;
+	/**
+	 * Getting no nearer the next corner (stuck against a block, or landing on one that went in across the way and
+	 * taking off again and again): ticks of it, the nearest it's been, and how many new ways it's tried.
+	 */
+	private int noProgress, replans;
+	private double nearest = Double.MAX_VALUE;
+	private boolean gaveUp;
+	/** Ticks without getting nearer before it works out the way again, and new ways before it gives up on this spot. */
+	private static final int STUCK_TICKS = 50, MAX_REPLANS = 3;
 	int takeoffs;
 	/** The area where a path is worked out block by block (round the farm); elsewhere it's a straight line. */
 	private Box detailed;
@@ -43,11 +51,19 @@ final class Pilot {
 		if (target != null && target.squaredDistanceTo(where) < 0.01) return;
 		target = where;
 		detailed = detailedArea;
+		replans = 0;
+		gaveUp = false;
 		replan(client);
+	}
+
+	/** It couldn't find a way there: tried a new way {@link #MAX_REPLANS} times and still got no nearer. */
+	boolean gaveUp() {
+		return gaveUp;
 	}
 
 	void stop(MinecraftClient client) {
 		target = null;
+		gaveUp = false;
 		path.clear();
 		release(client);
 	}
@@ -58,6 +74,8 @@ final class Pilot {
 
 	private void replan(MinecraftClient client) {
 		path.clear();
+		noProgress = 0;
+		nearest = Double.MAX_VALUE;
 		ClientPlayerEntity p = client.player;
 		if (p == null || target == null) return;
 		Vec3d from = p.getEntityPos();
@@ -139,6 +157,23 @@ final class Pilot {
 		}
 		ticks++;
 		Vec3d me = p.getEntityPos();
+		// Stuck, however it's stuck (standing still, or bouncing off a block it keeps landing on): a new way, and in
+		// the end give up on this spot so the job can pick another.
+		if (!path.isEmpty() && !gaveUp) {
+			double d = path.get(0).distanceTo(me);
+			if (d < nearest - 0.15) {
+				nearest = d;
+				noProgress = 0;
+			} else if (++noProgress > STUCK_TICKS) {
+				if (++replans > MAX_REPLANS) {
+					gaveUp = true;
+					release(client);
+					return;
+				}
+				replan(client);
+			}
+		}
+		if (gaveUp) return;
 		// Touched down (which ends elytra and creative flight alike): take off again. Jump, then jump again in the
 		// air, which opens the elytra (or turns creative flight back on).
 		boolean airborne = p.getAbilities().flying || p.isGliding();
@@ -155,7 +190,11 @@ final class Pilot {
 			}
 			return;
 		}
-		while (!path.isEmpty() && path.get(0).distanceTo(me) < (path.size() == 1 ? 0.5 : 0.8)) path.remove(0);
+		while (!path.isEmpty() && path.get(0).distanceTo(me) < (path.size() == 1 ? 0.5 : 0.8)) {
+			path.remove(0);
+			nearest = Double.MAX_VALUE;
+			noProgress = 0;
+		}
 		if (path.isEmpty()) {
 			release(client);
 			p.setVelocity(p.getVelocity().multiply(0.5, 0.5, 0.5));
@@ -183,14 +222,6 @@ final class Pilot {
 		client.options.jumpKey.setPressed(d.y > 0.25 && !coastingUp);
 		client.options.sneakKey.setPressed(d.y < -0.25 && !coastingDown);
 		client.options.sprintKey.setPressed(false);
-		// Stuck against something: work out the way again.
-		if (lastPos != null && lastPos.squaredDistanceTo(me) < 0.0004) stillTicks++;
-		else stillTicks = 0;
-		lastPos = me;
-		if (stillTicks > 30) {
-			stillTicks = 0;
-			replan(client);
-		}
 	}
 
 	void release(MinecraftClient client) {
