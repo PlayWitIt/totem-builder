@@ -40,6 +40,8 @@ final class Hud {
 	static List<Text> lines(MinecraftClient client) {
 		List<Text> lines = new ArrayList<>();
 		Farm farm = TotemBuilder.farm;
+		if (AutoBuild.active() && !AutoBuild.status.isEmpty())
+			lines.add(Text.literal("Auto: " + AutoBuild.status + "  (/totem stop)").formatted(Formatting.AQUA));
 		if (farm == null || client.world == null) return lines;
 		Vec3d me = client.player.getEntityPos();
 		if (me.squaredDistanceTo(Vec3d.ofCenter(farm.bed)) > 200 * 200) return lines;

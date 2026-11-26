@@ -27,7 +27,19 @@ In testing (real raids on Hard with Bad Omen V, in a test world) every raid was 
 was never hurt and no raider ever got out of the farm. About one raid in ten leaves a single raider wedged at the top
 for a while; the screen tells you when that happens and where (see below).
 
-## Building it
+## The easy way: /totem auto
+
+Have the materials on you (and your flight, e.g. elytra fly, switched on), type `/totem auto` and sit back. It looks
+for land in range; if there is any it flies away from it until there's nothing within 107 blocks, plans the farm
+there, then flies from block to block while the printer places them. When the water buckets run out it flies down to
+the sea, fills the empty ones and goes back. It stops when only the villager is left, and tells you where it goes.
+If you run out of something it stops and says what; fill up and `/totem auto` again carries on. `/totem stop` stops
+it. It flies by turning your view and holding your movement keys (forward, jump to go up, sneak to go down), and if it
+touches down it takes off again (jump, then jump in the air).
+
+`/totem` and all its commands stay on your side: they never go to the server or its chat.
+
+## Building it by hand
 
 1. Fly out over open ocean, at least 107 blocks from any land, island or building, and press **Plan the farm here** in the Mod Menu screen (or
    `/totem here`). The villager's bed goes right under you; the floor sits on the sea and the pad 105 blocks up.
@@ -74,5 +86,7 @@ check the spot, materials, villager spot, forget). Two unbound keys exist in Con
   lethal, the pad within the search height).
 - `./gradlew runRaidTest -PtbRaids=10`: builds the farm straight into a Hard test world high in the air and runs real
   raids with Bad Omen V: waves cleared, raiders stuck or lost, totems, the villager.
+- `./gradlew runAutoTest`: a sea with an island where you start; types /totem auto once and checks it flies clear of
+  the island, builds every block, fills its empty buckets at the sea and lets go of the keys.
 - `./gradlew runSelfTest`: survival, flying, with the materials: plans the farm, checks for land (and finds a block put
   out at sea), prints the whole farm block for block, seals the villager in, then runs a real raid on what it built.

@@ -46,14 +46,15 @@ public final class TotemBuilder implements ClientModInitializer {
 		HudElementRegistry.addLast(Identifier.of(ID, "hud"), Hud::render);
 		ClientCommandRegistrationCallback.EVENT.register((dispatcher, access) -> Commands.register(dispatcher));
 		ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> client.execute(() -> {
+			AutoBuild.stop(client, null);
 			printing = false;
 			farm = null;
 			check = null;
 			loadedFor = null;
 		}));
-		for (String test : new String[]{"raidtest", "selftest"}) {
+		for (String test : new String[]{"raidtest", "selftest", "autotest"}) {
 			if (!Boolean.getBoolean("totembuilder." + test)) continue;
-			String cls = test.equals("raidtest") ? "RaidTest" : "SelfTest";
+			String cls = test.equals("raidtest") ? "RaidTest" : test.equals("selftest") ? "SelfTest" : "AutoTest";
 			try {
 				Class.forName("com.greysworkshop.totembuilder." + cls).getDeclaredMethod("start").invoke(null);
 			} catch (ReflectiveOperationException e) {
@@ -81,7 +82,10 @@ public final class TotemBuilder implements ClientModInitializer {
 			if (check.finished) reportCheck(client);
 		}
 		Render.tick(client);
-		if (farm == null) return;
+		if (farm == null) {
+			AutoBuild.tick(client);
+			return;
+		}
 		if (!farm.sealed && Printer.villagerInside(client.world, farm)) {
 			if (!villagerSeen) {
 				villagerSeen = true;
@@ -89,6 +93,7 @@ public final class TotemBuilder implements ClientModInitializer {
 			}
 		}
 		if (printing) printer.tick(client, farm, perTick);
+		AutoBuild.tick(client);
 		if (!farm.sealed && villagerSeen && Printer.villagerInside(client.world, farm) && entranceFilled(client)) {
 			farm.sealed = true;
 			Farm.save(client, farm);
@@ -113,7 +118,7 @@ public final class TotemBuilder implements ClientModInitializer {
 
 	/** Plans the farm with the villager's bed right where you are, at the height that puts the floor on the sea. */
 	static void planHere(MinecraftClient client) {
-		int sea = client.world.getSeaLevel();
+		int sea = SpotFinder.floorY(client.world, client.player.getBlockX(), client.player.getBlockZ());
 		BlockPos bed = new BlockPos(client.player.getBlockX(), sea - FarmPlan.FLOOR_Y, client.player.getBlockZ());
 		farm = new Farm(bed);
 		Farm.save(client, farm);

@@ -26,7 +26,12 @@ public final class TotemScreen extends Screen {
 		MinecraftClient mc = MinecraftClient.getInstance();
 		boolean inWorld = mc.player != null && mc.world != null;
 		boolean planned = TotemBuilder.farm != null;
-		int w = 200, x = width / 2 - w / 2, y = height / 2 - 70;
+		int w = 200, x = width / 2 - w / 2, y = height / 2 - 82;
+		if (AutoBuild.active()) add(x, y - 24, w, "Stop auto-build", inWorld, c -> {
+			AutoBuild.stop(c, "Stopped.");
+			TotemBuilder.printing = false;
+		});
+		else add(x, y - 24, w, "Auto: find a spot and build it all", inWorld, AutoBuild::start);
 		add(x, y, w, planned ? "Plan the farm here (moves it)" : "Plan the farm here", inWorld, TotemBuilder::planHere);
 		add(x, y + 24, w, TotemBuilder.printing ? "Printer: ON (click to stop)" : "Printer: OFF (click to start)", inWorld && planned, TotemBuilder::togglePrinting);
 		add(x, y + 48, w, "Check the spot for land", inWorld && planned, TotemBuilder::runCheck);
@@ -54,7 +59,7 @@ public final class TotemScreen extends Screen {
 	@Override
 	public void render(DrawContext context, int mouseX, int mouseY, float delta) {
 		super.render(context, mouseX, mouseY, delta);
-		context.drawCenteredTextWithShadow(textRenderer, title, width / 2, height / 2 - 100, 0xFFFFD040);
+		context.drawCenteredTextWithShadow(textRenderer, title, width / 2, height / 2 - 132, 0xFFFFD040);
 		MinecraftClient mc = MinecraftClient.getInstance();
 		String status;
 		if (mc.world == null) status = "Join a world first.";
@@ -64,7 +69,7 @@ public final class TotemScreen extends Screen {
 			int left = m.values().stream().mapToInt(Integer::intValue).sum();
 			status = left == 0 ? "Built." + (TotemBuilder.farm.sealed ? " Villager sealed in: ready." : " Now the villager.") : left + " blocks still to place.";
 		}
-		context.drawCenteredTextWithShadow(textRenderer, Text.literal(status), width / 2, height / 2 - 86, 0xFFFFFFFF);
+		context.drawCenteredTextWithShadow(textRenderer, Text.literal(status), width / 2, height / 2 - 120, 0xFFFFFFFF);
 	}
 
 	@Override

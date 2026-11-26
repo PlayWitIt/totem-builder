@@ -52,6 +52,7 @@ public final class Printer {
 	private final Map<BlockPos, Long> opened = new HashMap<>();
 	public String lastProblem = "";
 	public int placedThisSession;
+	static int refills;
 	private long ticks;
 
 	/** Trapdoors and fence gates: placed shut, then opened with a click. */
@@ -328,7 +329,8 @@ public final class Printer {
 			client.interactionManager.interactItem(player, Hand.MAIN_HAND);
 			player.setYaw(oy);
 			player.setPitch(op);
-			TotemBuilder.LOGGER.info("Refilled a bucket from the self-refilling source at {}", p);
+			refills++;
+			TotemBuilder.LOGGER.info("Filled a bucket at {}", p);
 			return true;
 		}
 		return false;

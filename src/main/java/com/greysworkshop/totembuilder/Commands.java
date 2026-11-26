@@ -22,6 +22,11 @@ final class Commands {
 				// Just /totem: the screen with every button. Client commands never go to the server or its chat.
 				.executes(c -> run(client -> client.setScreen(new TotemScreen(null))))
 				.then(literal("help").executes(c -> run(Commands::help)))
+				.then(literal("auto").executes(c -> run(AutoBuild::start)))
+				.then(literal("stop").executes(c -> run(client -> {
+					AutoBuild.stop(client, "Stopped.");
+					TotemBuilder.printing = false;
+				})))
 				.then(literal("here").executes(c -> run(TotemBuilder::planHere)))
 				.then(literal("check").executes(c -> run(TotemBuilder::runCheck)))
 				.then(literal("print").executes(c -> run(TotemBuilder::togglePrinting)))
@@ -47,9 +52,16 @@ final class Commands {
 	}
 
 	static void help(MinecraftClient client) {
-		TotemBuilder.say(client, Text.literal("/totem here: plan the farm where you are (villager's bed under you, floor on the sea) · "
+		TotemBuilder.say(client, Text.literal("/totem: the screen · /totem auto: find a spot, fly there and build it all while you watch · /totem stop · /totem here: plan the farm where you are (villager's bed under you, floor on the sea) · "
 				+ "/totem check: look for land in range · /totem print: printer on/off (or the Mod Menu screen) · /totem materials · "
 				+ "/totem villager: where it goes · /totem status · /totem speed 1-8 · /totem forget"));
+	}
+
+	/** Everything placed but the villager's entrance (which waits for the villager)? */
+	static boolean builtExceptVillager(MinecraftClient client) {
+		Map<String, Integer> m = TotemBuilder.missing(client);
+		int left = m.values().stream().mapToInt(Integer::intValue).sum();
+		return left == 0 || left == FarmPlan.ENTRANCE.length && m.getOrDefault("Cobblestone", 0) == FarmPlan.ENTRANCE.length && !TotemBuilder.farm.sealed;
 	}
 
 	static void status(MinecraftClient client) {

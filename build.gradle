@@ -42,6 +42,7 @@ java {
 jar {
 	exclude 'com/greysworkshop/totembuilder/RaidTest*'
 	exclude 'com/greysworkshop/totembuilder/SelfTest*'
+	exclude 'com/greysworkshop/totembuilder/AutoTest*'
 }
 
 loom {
@@ -52,6 +53,13 @@ loom {
 			name = "Raid Test"
 			vmArgs "-Dtotembuilder.raidtest=true", "-Dtotembuilder.climbtest=${findProperty("tbClimb") ?: false}", "-Dtotembuilder.raids=${findProperty('tbRaids') ?: 3}",
 					"-Dtotembuilder.design=${findProperty('tbDesign') ?: 'main'}", "-Xmx1536m"
+			runDir "run"
+		}
+		// /totem auto from an island in a sea: finds a clean spot, flies there and builds it all.
+		autoTest {
+			client()
+			name = "Auto Test"
+			vmArgs "-Dtotembuilder.autotest=true", "-Xmx1536m"
 			runDir "run"
 		}
 		// The printer builds the whole farm in survival while flying, then real raids run on what it built.
