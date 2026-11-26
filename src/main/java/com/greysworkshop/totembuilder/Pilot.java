@@ -21,6 +21,8 @@ import java.util.Map;
  * arrives, when it's stopped, or when a screen is open.
  */
 final class Pilot {
+	/** Most it turns your view in a tick, in degrees. */
+	private static final float MAX_TURN = 25;
 	private Vec3d target;
 	private final List<Vec3d> path = new ArrayList<>();
 	private Vec3d lastPos;
@@ -162,15 +164,24 @@ final class Pilot {
 		Vec3d next = path.get(0);
 		Vec3d d = next.subtract(me);
 		double flat = Math.sqrt(d.x * d.x + d.z * d.z);
-		if (flat > 0.25) p.setYaw((float) (MathHelper.atan2(d.z, d.x) * 180 / Math.PI) - 90);
-		p.setPitch(0);
-		// Slow down close in: let go of forward and let the air stop you.
-		double speed = Math.sqrt(p.getVelocity().x * p.getVelocity().x + p.getVelocity().z * p.getVelocity().z);
-		boolean forward = flat > 0.3 && !(flat < 2.5 && speed > flat * 0.35);
+		// Turn smoothly, never snap: a snapped view jerks the screen, and the server sees a turn no player makes.
+		float off = 0;
+		if (flat > 0.25) {
+			off = MathHelper.wrapDegrees((float) (MathHelper.atan2(d.z, d.x) * 180 / Math.PI) - 90 - p.getYaw());
+			p.setYaw(p.getYaw() + MathHelper.clamp(off, -MAX_TURN, MAX_TURN));
+		}
+		p.setPitch(p.getPitch() + MathHelper.clamp(-p.getPitch(), -MAX_TURN, MAX_TURN));
+		// Slow down close in: let go of forward and let the air stop you. Only go forward once facing about the
+		// right way, so it doesn't swing out wide while it turns.
+		Vec3d v = p.getVelocity();
+		double speed = Math.sqrt(v.x * v.x + v.z * v.z);
+		boolean forward = flat > 0.3 && Math.abs(off) < 40 && !(flat < 2.5 && speed > flat * 0.35);
 		client.options.forwardKey.setPressed(forward);
 		client.options.backKey.setPressed(false);
-		client.options.jumpKey.setPressed(d.y > 0.25);
-		client.options.sneakKey.setPressed(d.y < -0.25);
+		// The same up and down: let go before it gets there, so it doesn't bob over and under the spot.
+		boolean coastingUp = v.y > 0 && d.y < 1.5 && v.y > d.y * 0.4, coastingDown = v.y < 0 && d.y > -1.5 && -v.y > -d.y * 0.4;
+		client.options.jumpKey.setPressed(d.y > 0.25 && !coastingUp);
+		client.options.sneakKey.setPressed(d.y < -0.25 && !coastingDown);
 		client.options.sprintKey.setPressed(false);
 		// Stuck against something: work out the way again.
 		if (lastPos != null && lastPos.squaredDistanceTo(me) < 0.0004) stillTicks++;
