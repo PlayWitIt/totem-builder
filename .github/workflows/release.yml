@@ -1,0 +1,52 @@
+# A new version in gradle.properties, pushed to main, is released: this builds that commit and makes the GitHub
+# release v<version> with its jar (the notes come from .github/release-notes.md; the tag is made with it). A version
+# that's already released is left alone, so later pushes don't repeat it.
+name: Release
+
+on:
+  push:
+    branches: [main]
+    paths: [gradle.properties, .github/workflows/release.yml, .github/release-notes.md]
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Which version, and is it out already?
+        id: version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          v=$(grep '^mod_version=' gradle.properties | cut -d= -f2 | tr -d '[:space:]')
+          echo "VERSION=$v" >> "$GITHUB_ENV"
+          echo "NAME=Totem Builder $v" >> "$GITHUB_ENV"
+          if gh release view "v$v" -R "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            echo "v$v is already released"
+            echo "new=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "new=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/setup-java@v4
+        if: steps.version.outputs.new == 'true'
+        with:
+          distribution: temurin
+          java-version: 21
+      - name: Build
+        if: steps.version.outputs.new == 'true'
+        run: chmod +x gradlew && ./gradlew build && ls build/libs
+      - name: GitHub release
+        if: steps.version.outputs.new == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ env.VERSION }}
+          target_commitish: ${{ github.sha }}
+          name: ${{ env.NAME }}
+          body_path: .github/release-notes.md
+          files: build/libs/totem-builder-${{ env.VERSION }}+1.21.11.jar
+          fail_on_unmatched_files: true
