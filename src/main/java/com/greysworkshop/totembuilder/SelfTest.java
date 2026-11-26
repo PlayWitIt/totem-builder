@@ -214,7 +214,7 @@ final class SelfTest {
 							if (child instanceof net.minecraft.client.gui.widget.ButtonWidget b && b.getMessage().getString().startsWith("Printer: OFF")) b.onPress(null);
 					check("the screen's Printer button turned the printer on", TotemBuilder.printing);
 					TotemBuilder.printing = true;
-					TotemBuilder.perTick = 2;
+					TotemBuilder.perSecond = 20;
 				}
 				// Fly on once the printer has nothing left in reach here (it placed nothing for a moment).
 				if (TotemBuilder.printer.placedThisSession != lastPlaced) {

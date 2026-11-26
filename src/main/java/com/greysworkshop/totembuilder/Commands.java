@@ -33,9 +33,11 @@ final class Commands {
 				.then(literal("status").executes(c -> run(Commands::status)))
 				.then(literal("materials").executes(c -> run(Commands::materials)))
 				.then(literal("villager").executes(c -> run(Commands::villager)))
-				.then(literal("speed").then(argument("blocks", IntegerArgumentType.integer(1, 8)).executes(c -> {
-					TotemBuilder.perTick = IntegerArgumentType.getInteger(c, "blocks");
-					return run(client -> TotemBuilder.say(client, Text.literal("Up to " + TotemBuilder.perTick + " blocks a tick.")));
+				.then(literal("speed").executes(c -> run(client -> TotemBuilder.say(client, Text.literal("Placing " + TotemBuilder.perSecond
+						+ " blocks a second. /totem speed 1-20 changes it (5 is like holding right-click; more can get you kicked)."))))
+						.then(argument("blocks", IntegerArgumentType.integer(1, 20)).executes(c -> {
+					TotemBuilder.perSecond = IntegerArgumentType.getInteger(c, "blocks");
+					return run(client -> TotemBuilder.say(client, Text.literal("Placing up to " + TotemBuilder.perSecond + " blocks a second.")));
 				})))
 				.then(literal("forget").executes(c -> run(client -> {
 					TotemBuilder.farm = null;
@@ -54,7 +56,7 @@ final class Commands {
 	static void help(MinecraftClient client) {
 		TotemBuilder.say(client, Text.literal("/totem: the screen · /totem auto: find a spot, fly there and build it all while you watch · /totem stop · /totem here: plan the farm where you are (villager's bed under you, floor on the sea) · "
 				+ "/totem check: look for land in range · /totem print: printer on/off (or the Mod Menu screen) · /totem materials · "
-				+ "/totem villager: where it goes · /totem status · /totem speed 1-8 · /totem forget"));
+				+ "/totem villager: where it goes · /totem status · /totem speed 1-20 (blocks a second) · /totem forget"));
 	}
 
 	/** Everything placed but the villager's entrance (which waits for the villager)? */

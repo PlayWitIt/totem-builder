@@ -75,7 +75,8 @@ Once the farm is built and the villager sealed in, nothing shows on screen unles
 ## Commands
 
 `/totem here` · `/totem check` · `/totem print` · `/totem materials` · `/totem villager` · `/totem status` ·
-`/totem speed 1-8` (blocks a tick, 2 by default) · `/totem forget`
+`/totem speed 1-20` (blocks a second, 5 by default: the rate of holding right-click, which servers with anti-cheat
+accept; much faster can get you kicked) · `/totem forget`
 
 No keys by default: everything is on the **Mod Menu → Totem Builder → Config** screen (plan here, printer on/off,
 check the spot, materials, villager spot, forget). Two unbound keys exist in Controls if you ever want them.

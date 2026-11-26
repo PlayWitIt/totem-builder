@@ -21,7 +21,6 @@ import net.minecraft.util.PlayerInput;
 import net.minecraft.util.hit.HitResult;
 import net.minecraft.world.RaycastContext;
 import net.minecraft.item.ItemStack;
-import net.minecraft.network.packet.c2s.play.PlayerMoveC2SPacket;
 import net.minecraft.registry.tag.BlockTags;
 import net.minecraft.registry.tag.ItemTags;
 import net.minecraft.screen.slot.SlotActionType;
@@ -41,9 +40,14 @@ import java.util.Map;
 
 /**
  * Places the farm while you fly around it: every tick, the missing blocks within reach that have something next to
- * them to place against, nearest first, a few per tick. It takes the right item from anywhere in your inventory,
- * faces the way a block needs (the bed, the trapdoors), and never clicks a block that would open or toggle. Blocks
- * placed but not yet confirmed by the server are left alone for a second so it never double-places.
+ * them to place against, nearest first, at the speed set ({@code /totem speed}, blocks a second). It takes the right
+ * item from anywhere in your inventory, faces the way a block needs (the bed, the trapdoors), and never clicks a block
+ * that would open or toggle. Blocks placed but not yet confirmed by the server are left alone for a second so it
+ * never double-places.
+ *
+ * <p>Each block takes two ticks, overlapping: one tick it picks the block and its look goes to the server with that
+ * tick's movement packet ({@link Look}); the next it clicks. So it's never more than one block a tick, and never an
+ * extra packet: what a server's anti-cheat sees is a player holding right-click and turning.
  */
 public final class Printer {
 	public enum Need { NOTHING, PLACE, WRONG }
@@ -54,6 +58,11 @@ public final class Printer {
 	public int placedThisSession;
 	static int refills;
 	private long ticks;
+	/** Blocks it may place now: a fraction more each tick, at most one. */
+	private double budget;
+	/** The block whose look went to the server this tick: clicked at the end of it. */
+	private record Queued(BlockPos pos, BlockState want, BlockHitResult hit) {}
+	private Queued queued;
 
 	/** Trapdoors and fence gates: placed shut, then opened with a click. */
 	static boolean opens(BlockState s) {
@@ -112,11 +121,26 @@ public final class Printer {
 		return !world.getEntitiesByClass(VillagerEntity.class, room.expand(0.2), e -> e.isAlive()).isEmpty();
 	}
 
-	public void tick(MinecraftClient client, Farm farm, int perTick) {
+	/** Stop: nothing waiting, your own look back. */
+	public void stop() {
+		queued = null;
+		Look.clear();
+	}
+
+	public void tick(MinecraftClient client, Farm farm, int perSecond) {
 		ticks++;
 		ClientPlayerEntity player = client.player;
 		ClientWorld world = client.world;
-		if (player == null || world == null || client.interactionManager == null || client.currentScreen != null) return;
+		if (player == null || world == null || client.interactionManager == null || client.currentScreen != null) {
+			stop();
+			return;
+		}
+		budget = Math.min(1, budget + Math.max(1, Math.min(20, perSecond)) / 20.0);
+		// Last tick's pick: the server has its look now, so click it.
+		Queued q = queued;
+		queued = null;
+		Look.clear();
+		if (q != null) click(client, player, world, farm, q);
 		pending.values().removeIf(t -> ticks - t > 20);
 		opened.values().removeIf(t -> ticks - t > 20);
 		double reach = player.getBlockInteractionRange() - 0.25;
@@ -127,8 +151,11 @@ public final class Printer {
 		// Water goes in last, once every block is in, so it never pours off an unfinished edge.
 		boolean dry = !waterTime(world, farm, targets);
 		// Water still to pour and no full bucket: fill the empty ones at any water in reach that isn't the farm's.
-		if (!dry && ticks % 4 == 0 && player.getInventory().count(Items.WATER_BUCKET) < waterStillToPour(world, farm)
-				&& refill(client, player, world, farm, eye, reach)) return;
+		if (!dry && budget >= 1 && player.getInventory().count(Items.WATER_BUCKET) < waterStillToPour(world, farm)
+				&& refill(client, player, world, farm, eye, reach)) {
+			budget -= 1;
+			return;
+		}
 		for (Map.Entry<BlockPos, BlockState> e : targets.entrySet()) {
 			BlockPos pos = e.getKey();
 			if (pending.containsKey(pos)) continue;
@@ -139,7 +166,7 @@ public final class Printer {
 			if (player.getBoundingBox().intersects(new Box(pos)) && !needsOpening(e.getValue(), world.getBlockState(pos)) && !e.getValue().isOf(Blocks.WATER)) continue;
 			candidates.add(pos);
 		}
-		if (candidates.isEmpty()) return;
+		if (candidates.isEmpty() || budget < 1) return;
 		// The bed before the room closes round it, then nearest first.
 		candidates.sort((a, b) -> {
 			boolean ba = targets.get(a).getBlock() instanceof BedBlock, bb = targets.get(b).getBlock() instanceof BedBlock;
@@ -149,7 +176,7 @@ public final class Printer {
 		int done = 0;
 		String problem = "";
 		for (BlockPos pos : candidates) {
-			if (done >= perTick) break;
+			if (done > 0 || budget < 1) break;
 			BlockState want = targets.get(pos);
 			BlockState have = world.getBlockState(pos);
 			// Shut trapdoor or gate: open it.
@@ -158,14 +185,16 @@ public final class Printer {
 				Vec3d hit = Vec3d.ofCenter(pos);
 				if (hit.distanceTo(eye) > reach) continue;
 				face(player, hit);
-				client.interactionManager.interactBlock(player, Hand.MAIN_HAND, new BlockHitResult(hit, Direction.UP, pos, false));
+				queued = new Queued(pos, want, new BlockHitResult(hit, Direction.UP, pos, false));
 				opened.put(pos, ticks);
+				budget -= 1;
 				done++;
 				continue;
 			}
 			if (want.isOf(Blocks.WATER) && !pos.equals(nextWater(world, farm))) continue;
 			int slot = find(player.getInventory(), want);
 			if (slot < 0 && want.isOf(Blocks.WATER) && refill(client, player, world, farm, eye, reach)) {
+				budget -= 1;
 				done++;
 				continue;
 			}
@@ -199,6 +228,7 @@ public final class Printer {
 				player.setPitch(op);
 				pending.put(pos, ticks);
 				placedThisSession++;
+				budget -= 1;
 				done++;
 				continue;
 			}
@@ -212,34 +242,57 @@ public final class Printer {
 				TotemBuilder.LOGGER.info("First block of the farm placed in the air at {}", pos);
 			}
 			if (hit == null) continue;
-			select(client, player, slot);
-			Direction look = want.getBlock() instanceof BedBlock ? want.get(BedBlock.FACING) : null;
-			float yaw = player.getYaw(), pitch = player.getPitch();
-			if (look != null) {
-				// The bed points the way you face: face east for a moment.
-				player.setYaw(look.getPositiveHorizontalDegrees());
-				player.setPitch(60);
-				player.networkHandler.sendPacket(new PlayerMoveC2SPacket.LookAndOnGround(player.getYaw(), player.getPitch(), player.isOnGround(), player.horizontalCollision));
-			} else {
-				face(player, hit.getPos());
-			}
-			// Against a gate or trapdoor, sneak so the click places instead of opening it.
-			boolean sneak = opens(world.getBlockState(hit.getBlockPos()));
-			if (sneak) sneak(player, true);
-			client.interactionManager.interactBlock(player, Hand.MAIN_HAND, hit);
-			if (sneak) sneak(player, false);
-			player.swingHand(Hand.MAIN_HAND);
-			if (look != null) {
-				player.setYaw(yaw);
-				player.setPitch(pitch);
-			}
+			// The bed points the way you face; everything else, look at where it's clicked.
+			if (want.getBlock() instanceof BedBlock) Look.set(want.get(BedBlock.FACING).getPositiveHorizontalDegrees(), 60);
+			else face(player, hit.getPos());
+			queued = new Queued(pos, want, hit);
 			pending.put(pos, ticks);
 			if (want.getBlock() instanceof BedBlock) pending.put(pos.offset(want.get(BedBlock.FACING)), ticks);
-			placedThisSession++;
+			budget -= 1;
 			done++;
 		}
 		if (done == 0 && !problem.isEmpty()) lastProblem = problem;
 		else if (done > 0) lastProblem = "";
+	}
+
+	/** The click for a block picked last tick, whose look the server has now; skipped if it's no longer wanted or in reach. */
+	private void click(MinecraftClient client, ClientPlayerEntity player, ClientWorld world, Farm farm, Queued q) {
+		BlockState have = world.getBlockState(q.pos());
+		if (needsOpening(q.want(), have)) {
+			if (q.hit().getPos().distanceTo(player.getEyePos()) > player.getBlockInteractionRange()) return;
+			client.interactionManager.interactBlock(player, Hand.MAIN_HAND, q.hit());
+			player.swingHand(Hand.MAIN_HAND);
+			return;
+		}
+		if (need(q.want(), have) != Need.PLACE || q.hit().getPos().distanceTo(player.getEyePos()) > player.getBlockInteractionRange()) {
+			pending.remove(q.pos());
+			return;
+		}
+		int slot = find(player.getInventory(), q.want());
+		if (slot < 0) {
+			pending.remove(q.pos());
+			return;
+		}
+		select(client, player, slot);
+		Direction look = q.want().getBlock() instanceof BedBlock ? q.want().get(BedBlock.FACING) : null;
+		float yaw = player.getYaw(), pitch = player.getPitch();
+		if (look != null) {
+			// So the game on your side places the bed the same way the server does.
+			player.setYaw(look.getPositiveHorizontalDegrees());
+			player.setPitch(60);
+		}
+		// Against a gate or trapdoor, sneak so the click places instead of opening it.
+		boolean sneak = opens(world.getBlockState(q.hit().getBlockPos()));
+		if (sneak) sneak(player, true);
+		client.interactionManager.interactBlock(player, Hand.MAIN_HAND, q.hit());
+		if (sneak) sneak(player, false);
+		player.swingHand(Hand.MAIN_HAND);
+		if (look != null) {
+			player.setYaw(yaw);
+			player.setPitch(pitch);
+		}
+		pending.put(q.pos(), ticks);
+		placedThisSession++;
 	}
 
 	/**
@@ -364,13 +417,13 @@ public final class Printer {
 		return false;
 	}
 
-	/** Server-side look at the spot, without turning your view. */
+	/** Server-side look at the spot, sent with the next tick's movement, without turning your view. */
 	private static void face(ClientPlayerEntity player, Vec3d at) {
 		Vec3d d = at.subtract(player.getEyePos());
 		double flat = Math.sqrt(d.x * d.x + d.z * d.z);
 		float yaw = (float) (MathHelper.atan2(d.z, d.x) * 180 / Math.PI) - 90;
 		float pitch = (float) -(MathHelper.atan2(d.y, flat) * 180 / Math.PI);
-		player.networkHandler.sendPacket(new PlayerMoveC2SPacket.LookAndOnGround(yaw, pitch, player.isOnGround(), player.horizontalCollision));
+		Look.set(yaw, pitch);
 	}
 
 	/**
