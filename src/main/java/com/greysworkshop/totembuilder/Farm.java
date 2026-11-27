@@ -18,6 +18,8 @@ public final class Farm {
 	public final FarmPlan plan;
 	/** You said the villager is in, or it was seen there: the entrance is filled. */
 	public boolean sealed;
+	/** Blocks the walking auto-builder put down to stand on, still to be taken away again. */
+	public final java.util.Set<BlockPos> scaffold = new java.util.HashSet<>();
 
 	public Farm(BlockPos bed) {
 		this.bed = bed;
@@ -47,6 +49,10 @@ public final class Farm {
 			if (o == null) return null;
 			Farm f = new Farm(new BlockPos(o.get("x").getAsInt(), o.get("y").getAsInt(), o.get("z").getAsInt()));
 			f.sealed = o.has("sealed") && o.get("sealed").getAsBoolean();
+			if (o.has("scaffold")) for (var el : o.getAsJsonArray("scaffold")) {
+				var a = el.getAsJsonArray();
+				f.scaffold.add(new BlockPos(a.get(0).getAsInt(), a.get(1).getAsInt(), a.get(2).getAsInt()));
+			}
 			return f;
 		} catch (Exception e) {
 			TotemBuilder.LOGGER.warn("Could not read {}: {}", file, e.toString());
@@ -66,6 +72,15 @@ public final class Farm {
 				o.addProperty("y", farm.bed.getY());
 				o.addProperty("z", farm.bed.getZ());
 				o.addProperty("sealed", farm.sealed);
+				com.google.gson.JsonArray sc = new com.google.gson.JsonArray();
+				for (BlockPos p : farm.scaffold) {
+					com.google.gson.JsonArray a = new com.google.gson.JsonArray();
+					a.add(p.getX());
+					a.add(p.getY());
+					a.add(p.getZ());
+					sc.add(a);
+				}
+				o.add("scaffold", sc);
 				all.add(k, o);
 			}
 			Files.createDirectories(file.getParent());

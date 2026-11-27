@@ -299,7 +299,7 @@ public final class Printer {
 	 * The one water spot to pour next, so two buckets always finish a row: the far end of a row whose first end is in,
 	 * else the first end of the first unfinished row, else a middle that didn't fill itself. Null when the lake's done.
 	 */
-	static BlockPos nextWater(ClientWorld world, Farm farm) {
+	static BlockPos nextWater(net.minecraft.world.BlockView world, Farm farm) {
 		java.util.List<BlockPos> water = new ArrayList<>();
 		for (Map.Entry<BlockPos, BlockState> e : farm.plan.blocks().entrySet())
 			if (e.getValue().isOf(Blocks.WATER) && !isSource(world, farm.bed.add(e.getKey()))) water.add(farm.bed.add(e.getKey()));
@@ -307,15 +307,15 @@ public final class Printer {
 		return water.isEmpty() ? null : water.get(0);
 	}
 
-	static int waterStillToPour(ClientWorld world, Farm farm) {
+	static int waterStillToPour(net.minecraft.world.BlockView world, Farm farm) {
 		int n = 0;
 		for (Map.Entry<BlockPos, BlockState> e : farm.plan.blocks().entrySet())
 			if (e.getValue().isOf(Blocks.WATER) && !isSource(world, farm.bed.add(e.getKey()))) n++;
 		return n;
 	}
 
-	static boolean isSource(ClientWorld world, BlockPos p) {
-		return world.getFluidState(p).isStill() && world.getFluidState(p).isIn(net.minecraft.registry.tag.FluidTags.WATER);
+	static boolean isSource(net.minecraft.world.BlockView world, BlockPos p) {
+		return world.getFluidState(p).isStill() && world.getFluidState(p).getFluid().matchesType(net.minecraft.fluid.Fluids.WATER);
 	}
 
 	/**
@@ -390,15 +390,19 @@ public final class Printer {
 	}
 
 	/** Can this block go in right now, from somewhere (something next to it, placed against the right way)? */
-	static boolean placeableNow(ClientWorld world, BlockPos pos, BlockState want) {
+	static boolean placeableNow(net.minecraft.world.BlockView world, BlockPos pos, BlockState want) {
 		if (want.isOf(Blocks.WATER)) return clickable(world, pos.down());
 		return placement(world, pos, want, Vec3d.ofCenter(pos), 3) != null;
 	}
 
-	/** Is everything but the water (and the villager's entrance) in place, so the water can go in? */
-	static boolean waterTime(ClientWorld world, Farm farm, Map<BlockPos, BlockState> targets) {
+	/**
+	 * Is everything up to the lake's level in place (all but the water and the villager's entrance), so the water can
+	 * go in? The walls above the water and the islands don't hold any of it, so they can come after.
+	 */
+	static boolean waterTime(net.minecraft.world.BlockView world, Farm farm, Map<BlockPos, BlockState> targets) {
+		int top = farm.bed.getY() + FarmPlan.PAD_Y;
 		for (Map.Entry<BlockPos, BlockState> e : targets.entrySet())
-			if (!e.getValue().isOf(Blocks.WATER) && need(e.getValue(), world.getBlockState(e.getKey())) != Need.NOTHING) {
+			if (!e.getValue().isOf(Blocks.WATER) && e.getKey().getY() <= top && need(e.getValue(), world.getBlockState(e.getKey())) != Need.NOTHING) {
 				boolean entrance = false;
 				for (BlockPos q : FarmPlan.ENTRANCE) entrance |= farm.bed.add(q).equals(e.getKey());
 				if (!entrance) return false;
@@ -431,7 +435,7 @@ public final class Printer {
 	 * clicked, chosen so the block comes out the right way (slabs on the bottom half, the bed from its foot), and in
 	 * reach. Null if there's nothing to place against yet.
 	 */
-	static BlockHitResult placement(ClientWorld world, BlockPos pos, BlockState want, Vec3d eye, double reach) {
+	static BlockHitResult placement(net.minecraft.world.BlockView world, BlockPos pos, BlockState want, Vec3d eye, double reach) {
 		Block block = want.getBlock();
 		if (block instanceof BedBlock) {
 			// The bed goes in from its foot, against the floor under it; its head cell must be free.
@@ -477,14 +481,17 @@ public final class Printer {
 	}
 
 	/** A block we can place against that does nothing when right-clicked. */
-	static boolean clickable(ClientWorld world, BlockPos pos) {
+	static boolean clickable(net.minecraft.world.BlockView world, BlockPos pos) {
 		BlockState s = world.getBlockState(pos);
 		if (s.isAir() || s.isReplaceable() || !s.getFluidState().isEmpty() && s.getCollisionShape(world, pos).isEmpty()) return false;
 		if (opens(s)) return true;
-		if (s.getBlock() instanceof BedBlock || s.isIn(BlockTags.DOORS)
-				|| s.isIn(BlockTags.BUTTONS) || s.isIn(BlockTags.SHULKER_BOXES) || s.isOf(Blocks.CHEST) || s.isOf(Blocks.ENDER_CHEST)
-				|| s.isOf(Blocks.CRAFTING_TABLE) || s.isOf(Blocks.FURNACE) || s.isOf(Blocks.LEVER) || s.isIn(BlockTags.ANVIL)
-				|| s.isIn(BlockTags.FENCE_GATES) || s.isOf(Blocks.HOPPER) || s.isOf(Blocks.BARREL)) return false;
+		Block b = s.getBlock();
+		// Anything that does something when clicked (opens, sits, lights up) would eat the click.
+		if (s.hasBlockEntity() || b instanceof BedBlock || b instanceof net.minecraft.block.DoorBlock || b instanceof net.minecraft.block.ButtonBlock
+				|| b instanceof net.minecraft.block.LeverBlock || b instanceof net.minecraft.block.AnvilBlock || b instanceof net.minecraft.block.CraftingTableBlock
+				|| b instanceof net.minecraft.block.NoteBlock || b instanceof net.minecraft.block.RepeaterBlock || b instanceof net.minecraft.block.ComparatorBlock
+				|| b instanceof net.minecraft.block.StonecutterBlock || b instanceof net.minecraft.block.GrindstoneBlock || b instanceof net.minecraft.block.LoomBlock
+				|| b instanceof net.minecraft.block.CartographyTableBlock || b instanceof net.minecraft.block.SmithingTableBlock) return false;
 		return !s.getCollisionShape(world, pos).isEmpty() || s.getBlock() instanceof net.minecraft.block.WallSignBlock;
 	}
 

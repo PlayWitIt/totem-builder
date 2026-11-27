@@ -5,60 +5,108 @@ import net.minecraft.block.BedBlock;
 import net.minecraft.block.BlockState;
 import net.minecraft.block.Blocks;
 import net.minecraft.block.SlabBlock;
-import net.minecraft.block.TrapdoorBlock;
+import net.minecraft.block.enums.SlabType;
 import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.render.LightmapTextureManager;
+import net.minecraft.client.render.OverlayTexture;
+import net.minecraft.client.render.RenderLayer;
 import net.minecraft.client.render.RenderLayers;
 import net.minecraft.client.render.VertexConsumer;
 import net.minecraft.client.render.VertexConsumerProvider;
+import net.minecraft.client.render.model.BakedQuad;
+import net.minecraft.client.render.model.BlockModelPart;
 import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.Direction;
 import net.minecraft.util.math.Vec3d;
+import net.minecraft.util.math.random.Random;
 import org.joml.Vector3f;
 
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
- * In the world: each missing block nearby as a thin outline in its colour (grey cobble, pale blue glass, brown
- * trapdoors, red bed), wrong blocks in thick red, the villager's spot as a green box with a green beam above it you
- * can see from far off, and spots the land check found in red.
+ * The farm drawn into the world, the way a schematic mod shows a build: every block still to place as a see-through
+ * copy of the real block (brighter where it can go in right now, faint where it's still floating), the next one to
+ * place outlined in pulsing cyan, wrong blocks and stray blocks that have to come out as red and purple boxes,
+ * scaffolding the auto-builder left as amber outlines, the villager's spot as a green box with a beam, and spots the
+ * land check found in red.
  */
 final class Render {
 	private Render() {}
 
-	private record Ghost(int x, int y, int z, double h, int rgb, boolean wrong) {}
+	private record Ghost(BlockPos pos, BlockState state, boolean now, int faces) {}
 
-	private static java.util.List<Ghost> ghosts = java.util.List.of();
-	/** Nearest first, and no more than this: drawing every missing block at once costs a weak graphics chip its frames. */
-	private static final int MAX = 250;
+	private record Mark(BlockPos pos, int kind) {}
 
-	/** Refreshes what to draw, four times a second. */
+	private static final int WRONG = 0, STRAY = 1, SCAFFOLD = 2;
+
+	private static List<Ghost> ghosts = List.of();
+	private static List<Mark> marks = List.of();
+	private static BlockPos next;
+	/** Nearest first, and no more than this: enough for the whole farm round you, light enough for a weak laptop. */
+	private static final int MAX_GHOSTS = 1600, MAX_MARKS = 300;
+	private static final Map<BlockState, List<BlockModelPart>> MODELS = new HashMap<>();
+
+	/** Refreshes what to draw from the latest survey. */
 	static void tick(MinecraftClient client) {
-		Farm farm = TotemBuilder.farm;
-		if (farm == null || client.player == null || client.world == null) {
-			ghosts = java.util.List.of();
+		Survey s = Survey.latest;
+		if (s == null || client.player == null || client.world == null) {
+			ghosts = List.of();
+			marks = List.of();
+			next = null;
 			return;
 		}
 		if (client.world.getTime() % 5 != 0) return;
-		Vec3d me = client.player.getEntityPos();
-		java.util.List<Ghost> list = new java.util.ArrayList<>();
-		java.util.List<double[]> order = new java.util.ArrayList<>();
-		for (Map.Entry<BlockPos, BlockState> t : Printer.targets(farm, true).entrySet()) {
-			BlockPos p = t.getKey();
-			double d = Vec3d.ofCenter(p).squaredDistanceTo(me);
-			if (d > 32 * 32) continue;
-			Printer.Need need = Printer.need(t.getValue(), client.world.getBlockState(p));
-			if (need == Printer.Need.NOTHING) continue;
-			double h = t.getValue().getBlock() instanceof SlabBlock ? 0.5 : t.getValue().getBlock() instanceof BedBlock ? 0.5625 : 1;
-			list.add(new Ghost(p.getX(), p.getY(), p.getZ(), h, color(t.getValue()), need == Printer.Need.WRONG));
-			order.add(new double[]{d, list.size() - 1});
+		Vec3d eye = client.player.getEyePos();
+		double range = Settings.ghostRange;
+		Settings.Ghosts mode = Settings.ghosts;
+		Survey.Cell n = s.next(eye);
+		next = n == null ? null : n.pos();
+
+		Set<BlockPos> wrongAt = new HashSet<>();
+		List<Mark> m = new ArrayList<>();
+		for (Survey.Extra e : s.extras) {
+			if (e.wrong()) wrongAt.add(e.pos());
+			if (Vec3d.ofCenter(e.pos()).squaredDistanceTo(eye) > 96 * 96) continue;
+			m.add(new Mark(e.pos(), e.wrong() ? WRONG : e.scaffold() ? SCAFFOLD : STRAY));
 		}
-		if (list.size() > MAX) {
-			order.sort((a, b) -> Double.compare(a[0], b[0]));
-			java.util.List<Ghost> near = new java.util.ArrayList<>();
-			for (int i = 0; i < MAX; i++) near.add(list.get((int) order.get(i)[1]));
-			list = near;
+		m.sort((a, b) -> Double.compare(Vec3d.ofCenter(a.pos).squaredDistanceTo(eye), Vec3d.ofCenter(b.pos).squaredDistanceTo(eye)));
+		marks = m.size() > MAX_MARKS ? m.subList(0, MAX_MARKS) : m;
+
+		if (mode == Settings.Ghosts.OFF) {
+			ghosts = List.of();
+			return;
 		}
-		ghosts = list;
+		// Full-cube ghosts hide each other's touching faces, as real blocks do.
+		Map<BlockPos, BlockState> full = new HashMap<>();
+		for (Survey.Cell c : s.missing) if (isCube(c.want())) full.put(c.pos(), c.want());
+		List<Ghost> g = new ArrayList<>();
+		for (Survey.Cell c : s.missing) {
+			if (wrongAt.contains(c.pos())) continue;
+			if (mode == Settings.Ghosts.PLACEABLE && !c.now() && !c.pos().equals(next)) continue;
+			if (Vec3d.ofCenter(c.pos()).squaredDistanceTo(eye) > range * range && !c.pos().equals(next)) continue;
+			int faces = 0;
+			for (Direction d : Direction.values()) {
+				BlockPos o = c.pos().offset(d);
+				boolean hidden = isCube(c.want()) && (full.containsKey(o) || client.world.getBlockState(o).isOpaqueFullCube());
+				if (!hidden) faces |= 1 << d.ordinal();
+			}
+			if (faces != 0 || !isCube(c.want())) g.add(new Ghost(c.pos(), c.want(), c.now(), faces));
+		}
+		if (g.size() > MAX_GHOSTS) {
+			g.sort((a, b) -> Double.compare(Vec3d.ofCenter(a.pos).squaredDistanceTo(eye), Vec3d.ofCenter(b.pos).squaredDistanceTo(eye)));
+			g = new ArrayList<>(g.subList(0, MAX_GHOSTS));
+		}
+		ghosts = g;
+	}
+
+	private static boolean isCube(BlockState s) {
+		return s.isOf(Blocks.COBBLESTONE) || s.isOf(Blocks.GLASS);
 	}
 
 	static void render(WorldRenderContext context) {
@@ -75,11 +123,70 @@ final class Render {
 			own = client.getBufferBuilders().getEntityVertexConsumers();
 			consumers = own;
 		}
+		long time = client.world.getTime();
+
+		// 1. The ghost blocks, with the real textures.
+		if (!ghosts.isEmpty()) {
+			RenderLayer layer = RenderLayers.translucentMovingBlock();
+			VertexConsumer vc = consumers.getBuffer(layer);
+			int light = LightmapTextureManager.MAX_LIGHT_COORDINATE;
+			for (Ghost g : ghosts) {
+				List<BlockModelPart> parts = MODELS.computeIfAbsent(g.state, st -> client.getBlockRenderManager().getModel(st).getParts(Random.create(42L)));
+				matrices.push();
+				matrices.translate(g.pos.getX() - cam.x, g.pos.getY() - cam.y, g.pos.getZ() - cam.z);
+				// Shrunk a touch, so a ghost never fights with a real block beside it.
+				matrices.translate(0.5, 0.5, 0.5);
+				matrices.scale(0.998f, 0.998f, 0.998f);
+				matrices.translate(-0.5, -0.5, -0.5);
+				MatrixStack.Entry e = matrices.peek();
+				float a = g.now ? 0.62f : 0.28f;
+				float r = g.now ? 1f : 0.75f, gr = g.now ? 1f : 0.85f, b = 1f;
+				for (BlockModelPart part : parts) {
+					for (Direction d : Direction.values()) {
+						if ((g.faces & 1 << d.ordinal()) == 0) continue;
+						for (BakedQuad q : part.getQuads(d)) {
+							vc.quad(e, q, r, gr, b, a, light, OverlayTexture.DEFAULT_UV);
+						}
+					}
+					for (BakedQuad q : part.getQuads(null)) {
+						vc.quad(e, q, r, gr, b, a, light, OverlayTexture.DEFAULT_UV);
+					}
+				}
+				matrices.pop();
+			}
+			if (consumers instanceof VertexConsumerProvider.Immediate im) im.draw(layer);
+		}
+
+		// 2. Filled boxes: water, the bed, wrong and stray blocks.
+		RenderLayer quads = RenderLayers.debugQuads();
+		VertexConsumer fill = consumers.getBuffer(quads);
+		MatrixStack.Entry base = matrices.peek();
+		for (Ghost g : ghosts) {
+			if (g.state.isOf(Blocks.WATER)) filled(fill, base, g.pos, cam, 0, 0.875, g.now ? 0x703070FF : 0x403070FF);
+			else if (g.state.getBlock() instanceof BedBlock) filled(fill, base, g.pos, cam, 0, 0.5625, g.now ? 0x90FF4040 : 0x50FF4040);
+		}
+		for (Mark mk : marks) {
+			if (mk.kind == WRONG) filled(fill, base, mk.pos, cam, -0.01, 1.02, 0x60FF2020);
+			else if (mk.kind == STRAY) filled(fill, base, mk.pos, cam, -0.01, 1.02, 0x60D030FF);
+		}
+		if (consumers instanceof VertexConsumerProvider.Immediate im) im.draw(quads);
+
+		// 3. Lines.
 		VertexConsumer lines = consumers.getBuffer(RenderLayers.lines());
 		MatrixStack.Entry e = matrices.peek();
-		for (Ghost g : ghosts) {
-			if (g.wrong) box(lines, e, g.x - cam.x, g.y - cam.y, g.z - cam.z, 1, 1, 1, 0xFFFF2020, 3f);
-			else box(lines, e, g.x + 0.08 - cam.x, g.y + 0.08 - cam.y, g.z + 0.08 - cam.z, 0.84, g.h - 0.16, 0.84, g.rgb, 1.5f);
+		for (Mark mk : marks) {
+			BlockPos p = mk.pos;
+			int c = mk.kind == WRONG ? 0xFFFF2020 : mk.kind == STRAY ? 0xFFD030FF : 0xFFFFB020;
+			box(lines, e, p.getX() - 0.005 - cam.x, p.getY() - 0.005 - cam.y, p.getZ() - 0.005 - cam.z, 1.01, 1.01, 1.01, c, mk.kind == SCAFFOLD ? 1.5f : 2.5f);
+		}
+		if (next != null) {
+			BlockState want = Printer.targets(farm, true).get(next);
+			double h = want == null ? 1 : height(want), y0 = want != null && want.getBlock() instanceof SlabBlock && want.get(SlabBlock.TYPE) == SlabType.TOP ? 0.5 : 0;
+			float pulse = 2f + 1.5f * (float) Math.abs(Math.sin(time * 0.25));
+			box(lines, e, next.getX() - cam.x, next.getY() + y0 - cam.y, next.getZ() - cam.z, 1, h, 1, 0xFF30FFFF, pulse);
+			// A short cyan stalk above it, so it's easy to find from across the farm.
+			double cx = next.getX() + 0.5 - cam.x, cz = next.getZ() + 0.5 - cam.z;
+			line(lines, e, cx, next.getY() + y0 + h - cam.y, cz, cx, next.getY() + 6 - cam.y, cz, 0x9030FFFF, 2f);
 		}
 		// The villager's spot.
 		if (!farm.sealed) {
@@ -99,17 +206,40 @@ final class Render {
 				line(lines, e, p.getX() + 0.5 - cam.x, p.getY() + 1 - cam.y, p.getZ() + 0.5 - cam.z, p.getX() + 0.5 - cam.x, p.getY() + 12 - cam.y, p.getZ() + 0.5 - cam.z, 0xFFFF2020, 3f);
 			}
 		}
-		if (own != null) own.draw(RenderLayers.lines());
+		if (own != null) own.draw();
+		else if (consumers instanceof VertexConsumerProvider.Immediate im) im.draw(RenderLayers.lines());
 	}
 
-	private static int color(BlockState s) {
-		if (s.isOf(Blocks.GLASS)) return 0xFFA0E0FF;
-		if (s.isOf(Blocks.WATER)) return 0xFF3070FF;
-		if (s.getBlock() instanceof net.minecraft.block.FenceGateBlock) return 0xFFC08040;
-		if (s.getBlock() instanceof TrapdoorBlock) return 0xFFC08040;
-		if (s.getBlock() instanceof BedBlock) return 0xFFFF4040;
-		if (s.getBlock() instanceof SlabBlock) return 0xFFE0E0E0;
-		return 0xFF9A9A9A;
+	private static double height(BlockState s) {
+		if (s.getBlock() instanceof SlabBlock) return s.get(SlabBlock.TYPE) == SlabType.DOUBLE ? 1 : 0.5;
+		if (s.getBlock() instanceof BedBlock) return 0.5625;
+		return 1;
+	}
+
+	/** A see-through box over a cell, from {@code y0} up {@code h}. */
+	private static void filled(VertexConsumer vc, MatrixStack.Entry e, BlockPos p, Vec3d cam, double y0, double h, int argb) {
+		float x1 = (float) (p.getX() - cam.x), y1 = (float) (p.getY() + y0 - cam.y), z1 = (float) (p.getZ() - cam.z);
+		float x2 = x1 + 1, y2 = (float) (y1 + h), z2 = z1 + 1;
+		if (h > 1) {
+			x1 -= 0.01f;
+			z1 -= 0.01f;
+			x2 += 0.01f;
+			z2 += 0.01f;
+		}
+		quad(vc, e, x1, y1, z1, x2, y1, z1, x2, y1, z2, x1, y1, z2, argb);
+		quad(vc, e, x1, y2, z1, x1, y2, z2, x2, y2, z2, x2, y2, z1, argb);
+		quad(vc, e, x1, y1, z1, x1, y2, z1, x2, y2, z1, x2, y1, z1, argb);
+		quad(vc, e, x1, y1, z2, x2, y1, z2, x2, y2, z2, x1, y2, z2, argb);
+		quad(vc, e, x1, y1, z1, x1, y1, z2, x1, y2, z2, x1, y2, z1, argb);
+		quad(vc, e, x2, y1, z1, x2, y2, z1, x2, y2, z2, x2, y1, z2, argb);
+	}
+
+	private static void quad(VertexConsumer vc, MatrixStack.Entry e, float ax, float ay, float az, float bx, float by, float bz, float cx, float cy, float cz,
+			float dx, float dy, float dz, int argb) {
+		vc.vertex(e, ax, ay, az).color(argb);
+		vc.vertex(e, bx, by, bz).color(argb);
+		vc.vertex(e, cx, cy, cz).color(argb);
+		vc.vertex(e, dx, dy, dz).color(argb);
 	}
 
 	private static void line(VertexConsumer lines, MatrixStack.Entry entry, double x1, double y1, double z1, double x2, double y2, double z2, int argb, float width) {
