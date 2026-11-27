@@ -239,12 +239,8 @@ public final class Printer {
 			}
 			if (want.isOf(Blocks.WATER)) {
 				// A bucket goes where you look: look down at the floor under the spot, from where nothing's in the way.
-				BlockPos floor = pos.down();
-				Vec3d at = new Vec3d(pos.getX() + 0.5, pos.getY(), pos.getZ() + 0.5);
-				if (at.distanceTo(eye) > reach) continue;
-				BlockHitResult ray = world.raycast(new RaycastContext(eye, at.add(at.subtract(eye).normalize().multiply(0.2)), RaycastContext.ShapeType.OUTLINE,
-						RaycastContext.FluidHandling.NONE, player));
-				if (ray.getType() != HitResult.Type.BLOCK || !ray.getBlockPos().equals(floor) || ray.getSide() != Direction.UP) {
+				Vec3d at = pourAim(world, eye, pos, reach);
+				if (at == null) {
 					problem = "fly above the water spot to fill it";
 					continue;
 				}
@@ -419,6 +415,23 @@ public final class Printer {
 			return true;
 		}
 		return false;
+	}
+
+	/**
+	 * Where to look to pour a bucket into {@code pos}: a point on the top of the block under it that a straight look
+	 * from the eyes reaches with nothing in the way (its middle first, then nearer its corners). Null if none.
+	 */
+	static Vec3d pourAim(net.minecraft.world.BlockView world, Vec3d eye, BlockPos pos, double reach) {
+		BlockPos floor = pos.down();
+		double[][] offsets = {{0.5, 0.5}, {0.3, 0.3}, {0.7, 0.3}, {0.3, 0.7}, {0.7, 0.7}, {0.5, 0.25}, {0.5, 0.75}, {0.25, 0.5}, {0.75, 0.5}};
+		for (double[] o : offsets) {
+			Vec3d at = new Vec3d(pos.getX() + o[0], pos.getY(), pos.getZ() + o[1]);
+			if (at.distanceTo(eye) > reach) continue;
+			BlockHitResult ray = world.raycast(new RaycastContext(eye, at.add(at.subtract(eye).normalize().multiply(0.2)), RaycastContext.ShapeType.OUTLINE,
+					RaycastContext.FluidHandling.NONE, net.minecraft.block.ShapeContext.absent()));
+			if (ray.getType() == HitResult.Type.BLOCK && ray.getBlockPos().equals(floor) && ray.getSide() == Direction.UP) return at;
+		}
+		return null;
 	}
 
 	/** Can this block go in right now, from somewhere (something next to it, placed against the right way)? */

@@ -532,13 +532,8 @@ final class Walk {
 
 	/** A bucket pours where you look: from here, does a look at the water's spot land on the floor under it? */
 	boolean canPourFrom(BlockPos feet, double base, BlockPos t) {
-		Vec3d eye = eye(feet, base);
-		Vec3d at = new Vec3d(t.getX() + 0.5, t.getY(), t.getZ() + 0.5);
-		if (at.distanceTo(eye) > REACH) return false;
 		if (body(feet, base).intersects(new Box(t))) return false;
-		BlockHitResult ray = world.raycast(new RaycastContext(eye, at.add(at.subtract(eye).normalize().multiply(0.2)), RaycastContext.ShapeType.OUTLINE,
-				RaycastContext.FluidHandling.NONE, ShapeContext.absent()));
-		return ray.getType() == HitResult.Type.BLOCK && ray.getBlockPos().equals(t.down()) && ray.getSide() == Direction.UP;
+		return Printer.pourAim(world, eye(feet, base), t, REACH) != null;
 	}
 
 	// ---- Not walling itself in ----

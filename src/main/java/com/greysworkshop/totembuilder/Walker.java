@@ -54,7 +54,7 @@ final class Walker {
 	private static final java.util.Map<BlockPos, Boolean> safe = new java.util.HashMap<>();
 	private static BlockPos safeFeet;
 	private static int safeAt;
-	private static int placed, broken;
+	private static int placed, broken, pourFails;
 	private static final ExecutorService POOL = Executors.newSingleThreadExecutor(r -> {
 		Thread t = new Thread(r, "Totem Builder planner");
 		t.setDaemon(true);
@@ -107,6 +107,7 @@ final class Walker {
 		planning = null;
 		skip.clear();
 		failures = 0;
+		pourFails = 0;
 		ticks = 0;
 		TotemBuilder.printing = true;
 		Survey s = Survey.of(client);
@@ -378,10 +379,11 @@ final class Walker {
 		BlockPos t = job.target();
 		switch (job.act()) {
 			case PLACE, POUR -> {
+				BlockState want = Printer.targets(farm, farm.sealed).get(t);
+				if (want != null && Printer.needsOpening(want, world.getBlockState(t))) return openGate(client, p, world, t);
 				// The printer puts it in (it's in reach now); wait for it.
 				Printer.paused = false;
 				centre(client, p, world, feet);
-				BlockState want = Printer.targets(farm, farm.sealed).get(t);
 				if (want == null || Printer.need(want, world.getBlockState(t)) == Printer.Need.NOTHING) return true;
 				if (job.act() == Walk.Act.POUR && Printer.find(p.getInventory(), want) < 0 && Printer.refillSpot(world, farm) == null && p.getInventory().count(Items.BUCKET) == 0) {
 					stop(client, "Out of water buckets: it needs " + Printer.waterStillToPour(world, farm) + " more. Bring them and start it again.");
@@ -393,7 +395,14 @@ final class Walker {
 					return true;
 				}
 				if (actTicks > 60) {
+					Walk lw = live;
+					BlockState have = world.getBlockState(t);
+					TotemBuilder.LOGGER.info("[walk] gave up on {} {}: have {}, need {}, lowest layer {}, allowed {}, safe {}, in reach {}, printer says '{}'",
+							t.subtract(farm.bed).toShortString(), want.getBlock(), have, Printer.need(want, have), lw.lowPlaceable - farm.bed.getY(), lw.allowPlace(t),
+							lw.safeToFill(t, feet, lw.floor(feet)), Printer.placement(world, t, want, p.getEyePos(), p.getBlockInteractionRange() - 0.25) != null,
+							TotemBuilder.printer.lastProblem);
 					skip.add(t);
+					if (job.act() == Walk.Act.POUR && ++pourFails >= 8) stop(client, "Stopped: couldn't pour the water at " + t.toShortString() + " (" + TotemBuilder.printer.lastProblem + ").");
 					return true;
 				}
 				return false;
@@ -445,6 +454,30 @@ final class Walker {
 				return true;
 			}
 		}
+	}
+
+	/**
+	 * A gate that's in but shut: stand still, stand up (a sneaking click would put a block in front of it instead), look
+	 * at it, click it once, and see it open.
+	 */
+	private static boolean openGate(MinecraftClient client, ClientPlayerEntity p, ClientWorld world, BlockPos t) {
+		Printer.paused = true;
+		release(client);
+		Vec3d c = Vec3d.ofCenter(t);
+		face(p, c);
+		if (!Printer.needsOpening(Printer.targets(TotemBuilder.farm, TotemBuilder.farm.sealed).get(t), world.getBlockState(t))) return true;
+		if (p.isSneaking() || !p.isOnGround()) return actTicks > 100;
+		if (actTicks % 10 == 5 && c.distanceTo(p.getEyePos()) <= p.getBlockInteractionRange() && TotemBuilder.printer.take()) {
+			Direction side = Direction.getFacing(p.getEyePos().subtract(c));
+			client.interactionManager.interactBlock(p, Hand.MAIN_HAND, new BlockHitResult(c, side, t, false));
+			p.swingHand(Hand.MAIN_HAND);
+			TotemBuilder.LOGGER.info("[walk] opening the gate at {}", t.subtract(TotemBuilder.farm.bed).toShortString());
+		}
+		if (actTicks > 100) {
+			skip.add(t);
+			return true;
+		}
+		return false;
 	}
 
 	/** Not standing anywhere: in the water, put a block on the surface beside it and climb up onto it. */

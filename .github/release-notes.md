@@ -1,7 +1,18 @@
-- **No more kicks for placing too fast.** It places 5 blocks a second by default, the rate of holding right-click
-  (`/totem speed 1-20` changes it; it was 40 a second). It no longer sends extra look packets: where it looks for each
-  block goes in the game's own movement packet, so anti-cheat sees a player holding right-click and turning.
-- **Smoother flight.** It turns at most 25° a tick instead of snapping your view, only flies forward once it's facing
-  about the right way, and lets go of up or down just before the right height, so it doesn't bob.
-- **Auto-build no longer gets stuck** when a new block ends up across its way: it finds another way when it stops
-  getting nearer, and after 3 tries goes for a different block.
+- **Ghost blocks, like a schematic mod.** Every block still to place shows in the world as a see-through copy of the
+  real block: bright where it can go in right now, faint where it still needs something beside it. The next block has
+  a pulsing cyan outline. Wrong blocks are red boxes (break them), blocks that don't belong anywhere in the farm (old
+  scaffolding, a misplaced block) are purple boxes (take them out). **Ghosts** button: everything left, only what can
+  go in now, or off.
+- **What's left, on the screen, not in chat.** A bar for each part of the farm (floor and booth, villager room,
+  columns, drop walls, pad and lake, water, walls, islands), and every block still needed as its item, with how many
+  you carry, in red where you're short. The top-left lines show the next block's item and which way it is, and what
+  you're short of.
+- **Auto on foot: walk + scaffolding.** No flying needed. Stand on the farm or a block beside it and press it (or
+  `/totem walk`): it walks, pillars and bridges on your scaffolding block, builds every layer from the bottom so it
+  never shuts itself in, breaks wrong and stray blocks, pours the lake from the dry wall top, finishes the walls and
+  islands, then takes all its scaffolding back, riding its pillar down. In testing it built the whole farm from one
+  block in the sea in about half an hour, every block right and nothing left behind, and finished a two-thirds built
+  farm with old scaffolding and a wrong block in it.
+- **Scaffolding block** of your choice: cobblestone unless you pick another on the screen, or hold one and press
+  **Held** (`/totem scaffold`).
+- The screen fits a small window (854 × 480).
