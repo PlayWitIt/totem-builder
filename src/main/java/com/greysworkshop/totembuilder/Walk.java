@@ -116,7 +116,8 @@ final class Walk {
 			if (breakable(s)) lowBreak.add(q.toImmutable());
 		}
 		int low = Integer.MAX_VALUE;
-		for (BlockPos p : (lowPlace.isEmpty() ? highPlace : lowPlace)) if (Printer.placeableNow(world, p, targets.get(p))) low = Math.min(low, p.getY());
+		for (BlockPos p : (lowPlace.isEmpty() ? highPlace : lowPlace))
+			if (Printer.placeableNow(world, p, targets.get(p)) || Printer.needsOpening(targets.get(p), world.getBlockState(p))) low = Math.min(low, p.getY());
 		lowPlaceable = low;
 		boolean lakeScaffold = scaffoldLeft.stream().anyMatch(this::lakeZone);
 		if (!lowPlace.isEmpty() || !lowBreak.isEmpty()) {
@@ -208,6 +209,11 @@ final class Walk {
 	 */
 	double floor(BlockPos f) {
 		if (!region.contains(Vec3d.ofCenter(f)) || protectedCell(f)) return Double.NaN;
+		// Below the floor is the sea: a block dug out there fills with water again.
+		if (f.getY() < floorY) return Double.NaN;
+		// Once the lake is going in, never down on its floor or in the deep corner: the current would carry it to
+		// the drop. It pours from the walkway and the pad, a block higher and dry.
+		if (phase.ordinal() >= Phase.WATER.ordinal() && f.getY() <= padY && f.getY() >= padY - 1 && lakeZone(f)) return Double.NaN;
 		BlockState at = get(f);
 		if (!at.getFluidState().isEmpty()) return Double.NaN;
 		VoxelShape s = at.getCollisionShape(world, f);
@@ -680,7 +686,9 @@ final class Walk {
 				}
 			}
 			final BlockPos ex = exit;
-			level.sort(Comparator.comparingDouble((BlockPos p) -> -p.getSquaredDistance(ex)));
+			// Nearest first (no running back and forth across the farm), the way down last; breaking one that would
+			// leave it no way out is refused by the check below and it tries the next.
+			level.sort(Comparator.comparingDouble((BlockPos p) -> (p.equals(ex) ? 1e9 : 0) + Vec3d.ofCenter(p).squaredDistanceTo(eye)));
 			// The last one is the block underfoot: break it and drop into the sea (or onto whatever is below).
 			if (toBreak.size() == 1 && toBreak.get(0).equals(feet.down())) return new Job(Act.BREAK, feet.down(), null, List.of(), "last");
 			// When all that's left is on the sea, nothing new goes in to reach the rest: it walks to them.
@@ -718,7 +726,7 @@ final class Walk {
 		for (BlockPos p : toPlace) {
 			if (skip.contains(p)) continue;
 			if (!Printer.placeableNow(world, p, targets.get(p))) continue;
-			if (!have.test(targets.get(p))) continue;
+			if (!have.test(targets.get(p)) && !Printer.needsOpening(targets.get(p), world.getBlockState(p))) continue;
 			place.add(p);
 			lowY = Math.min(lowY, p.getY());
 		}

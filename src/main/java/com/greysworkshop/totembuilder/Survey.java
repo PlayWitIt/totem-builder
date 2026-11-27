@@ -115,7 +115,7 @@ final class Survey {
 			latest = null;
 			return;
 		}
-		if (latest != null && ++age < 5) return;
+		if (latest != null && ++age < 10) return;
 		age = 0;
 		latest = of(client);
 	}

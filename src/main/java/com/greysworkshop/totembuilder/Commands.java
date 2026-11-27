@@ -23,7 +23,20 @@ final class Commands {
 				.executes(c -> run(client -> client.setScreen(new TotemScreen(null))))
 				.then(literal("help").executes(c -> run(Commands::help)))
 				.then(literal("auto").executes(c -> run(AutoBuild::start)))
+				.then(literal("walk").executes(c -> run(Walker::start)))
+				.then(literal("scaffold").executes(c -> run(client -> {
+					if (client.player != null && Settings.useHeld(client.player.getMainHandStack()))
+						TotemBuilder.say(client, Text.literal("Scaffolding: " + Settings.scaffoldName() + " (the block in your hand)."));
+					else TotemBuilder.say(client, Text.literal("Scaffolding: " + Settings.scaffoldName()
+							+ ". Hold another plain full block and /totem scaffold to use that instead, or change it on the screen (/totem)."));
+				})))
+				.then(literal("ghosts").executes(c -> run(client -> {
+					Settings.ghosts = Settings.ghosts.next();
+					Settings.save();
+					TotemBuilder.say(client, Text.literal(Settings.ghosts.label));
+				})))
 				.then(literal("stop").executes(c -> run(client -> {
+					Walker.stop(client, null);
 					AutoBuild.stop(client, "Stopped.");
 					TotemBuilder.printing = false;
 				})))
@@ -54,7 +67,7 @@ final class Commands {
 	}
 
 	static void help(MinecraftClient client) {
-		TotemBuilder.say(client, Text.literal("/totem: the screen · /totem auto: find a spot, fly there and build it all while you watch · /totem stop · /totem here: plan the farm where you are (villager's bed under you, floor on the sea) · "
+		TotemBuilder.say(client, Text.literal("/totem: the screen (what's left, ghosts, scaffolding) · /totem walk: build it all on foot with scaffolding · /totem auto: find a spot, fly there and build it all · /totem stop · /totem ghosts · /totem scaffold: use the block in your hand · /totem here: plan the farm where you are (villager's bed under you, floor on the sea) · "
 				+ "/totem check: look for land in range · /totem print: printer on/off (or the Mod Menu screen) · /totem materials · "
 				+ "/totem villager: where it goes · /totem status · /totem speed 1-20 (blocks a second) · /totem forget"));
 	}

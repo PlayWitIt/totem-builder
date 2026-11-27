@@ -43,6 +43,7 @@ jar {
 	exclude 'com/greysworkshop/totembuilder/RaidTest*'
 	exclude 'com/greysworkshop/totembuilder/SelfTest*'
 	exclude 'com/greysworkshop/totembuilder/AutoTest*'
+	exclude 'com/greysworkshop/totembuilder/WalkTest*'
 }
 
 loom {
@@ -60,6 +61,13 @@ loom {
 			client()
 			name = "Auto Test"
 			vmArgs "-Dtotembuilder.autotest=true", "-Xmx1536m"
+			runDir "run"
+		}
+		// The walking auto-builder builds it all on foot from one block in the sea: ./gradlew runWalkTest [-PtbHalf=true]
+		walkTest {
+			client()
+			name = "Walk Test"
+			vmArgs "-Dtotembuilder.walktest=true", "-Dtotembuilder.half=${findProperty('tbHalf') ?: false}", "-Dtotembuilder.render=${findProperty('tbRender') ?: false}", "-Dtotembuilder.from=${findProperty('tbFrom') ?: ''}", "-Xmx1536m"
 			runDir "run"
 		}
 		// The printer builds the whole farm in survival while flying, then real raids run on what it built.

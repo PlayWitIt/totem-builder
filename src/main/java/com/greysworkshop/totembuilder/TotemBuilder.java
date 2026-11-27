@@ -42,11 +42,14 @@ public final class TotemBuilder implements ClientModInitializer {
 		KeyBinding.Category category = KeyBinding.Category.create(Identifier.of(ID, "main"));
 		printKey = KeyBindingHelper.registerKeyBinding(new KeyBinding("key.totembuilder.print", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_UNKNOWN, category));
 		planKey = KeyBindingHelper.registerKeyBinding(new KeyBinding("key.totembuilder.plan", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_UNKNOWN, category));
+		Settings.load();
 		ClientTickEvents.END_CLIENT_TICK.register(TotemBuilder::tick);
+		WorldRenderEvents.BEFORE_ENTITIES.register(Render::queue);
 		WorldRenderEvents.BEFORE_DEBUG_RENDER.register(Render::render);
 		HudElementRegistry.addLast(Identifier.of(ID, "hud"), Hud::render);
 		ClientCommandRegistrationCallback.EVENT.register((dispatcher, access) -> Commands.register(dispatcher));
 		ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> client.execute(() -> {
+			Walker.stop(client, null);
 			AutoBuild.stop(client, null);
 			printer.stop();
 			printing = false;
@@ -54,9 +57,14 @@ public final class TotemBuilder implements ClientModInitializer {
 			check = null;
 			loadedFor = null;
 		}));
-		for (String test : new String[]{"raidtest", "selftest", "autotest"}) {
+		for (String test : new String[]{"raidtest", "selftest", "autotest", "walktest"}) {
 			if (!Boolean.getBoolean("totembuilder." + test)) continue;
-			String cls = test.equals("raidtest") ? "RaidTest" : test.equals("selftest") ? "SelfTest" : "AutoTest";
+			String cls = switch (test) {
+				case "raidtest" -> "RaidTest";
+				case "selftest" -> "SelfTest";
+				case "walktest" -> "WalkTest";
+				default -> "AutoTest";
+			};
 			try {
 				Class.forName("com.greysworkshop.totembuilder." + cls).getDeclaredMethod("start").invoke(null);
 			} catch (ReflectiveOperationException e) {
@@ -83,6 +91,7 @@ public final class TotemBuilder implements ClientModInitializer {
 			check.step(client.world, 6);
 			if (check.finished) reportCheck(client);
 		}
+		Survey.tick(client);
 		Render.tick(client);
 		if (farm == null) {
 			printer.stop();
@@ -95,7 +104,8 @@ public final class TotemBuilder implements ClientModInitializer {
 				say(client, Text.literal("Villager is in its room. Wait for green sparkles over it (it has claimed the bed), then the printer fills the entrance.").formatted(Formatting.GREEN));
 			}
 		}
-		if (printing) printer.tick(client, farm, perSecond);
+		Walker.tick(client);
+		if (printing && farm != null) printer.tick(client, farm, perSecond);
 		else printer.stop();
 		AutoBuild.tick(client);
 		if (!farm.sealed && villagerSeen && Printer.villagerInside(client.world, farm) && entranceFilled(client)) {

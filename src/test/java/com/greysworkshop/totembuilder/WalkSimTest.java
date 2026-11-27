@@ -85,6 +85,7 @@ class WalkSimTest {
 		String log = "";
 		boolean escaped = true;
 		int stepLost;
+		final java.util.List<String> trail = new java.util.ArrayList<>();
 
 		Walk walk() {
 			return new Walk(world, farm, false, COBBLE, skip, s -> true);
@@ -122,8 +123,8 @@ class WalkSimTest {
 
 		void pourAndFlow(BlockPos t) {
 			world.put(t, WATER);
-			// Once all six are in, the lake fills: every open cell of it at its level, and the corner beside the drop.
-			if (Printer.waterStillToPour(world, farm) == 0) {
+			// The lake fills from the first one: every open cell of it at its level, and the corner beside the drop.
+			{
 				int p = farm.bed.getY() + FarmPlan.PAD_Y;
 				for (int x = -4; x <= 3; x++)
 					for (int z = -4; z <= 3; z++)
@@ -150,6 +151,9 @@ class WalkSimTest {
 				Walk w = walk();
 				Walk.Job job = w.next(feet);
 				jobs++;
+				trail.add(w.phase + " " + job.act() + " " + job.why() + " " + (job.target() == null ? "" : job.target().subtract(farm.bed).toShortString()) + " from "
+						+ feet.subtract(farm.bed).toShortString() + " path " + job.path().stream().map(x -> x.kind().name().charAt(0) + ">" + x.to().subtract(farm.bed).toShortString()).toList());
+				if (trail.size() > 14) trail.remove(0);
 				if (job.act() == Walk.Act.DONE) return "done";
 				if (job.act() == Walk.Act.BOOT) {
 					// In the sea: a block of scaffolding on the surface beside it, and up onto it.
@@ -313,6 +317,7 @@ class WalkSimTest {
 		}
 
 		void report(String name, String end, long ms) {
+			if (!end.equals("done")) for (String t : trail) System.out.println("  trail: " + t);
 			Survey s = Survey.of(world, farm);
 			System.out.println(name + ": " + end + " in " + jobs + " jobs, " + moves + " moves (" + pillars + " pillar, " + digs + " dig), "
 					+ scaffoldPlaced + " scaffolding placed, " + tunnels + " tunnels, " + falls + " falls into the sea, " + boots + " climbs out, " + farm.scaffold.size() + " left, " + s.extras.size() + " extras, " + ms + " ms");

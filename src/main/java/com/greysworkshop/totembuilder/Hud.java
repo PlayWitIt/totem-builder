@@ -150,7 +150,9 @@ final class Hud {
 		double rel = MathHelper.wrapDegrees(yawTo - client.player.getYaw());
 		int i = Math.floorMod((int) Math.round(rel / 45.0), 8);
 		int up = (int) Math.round(d.y);
-		String vert = Math.abs(up) < 2 ? "" : ", " + Math.abs(up) + (up > 0 ? " up" : " down");
-		return (flat < 3 ? "" : ARROWS[i] + " " + (int) flat + " m") + vert + (flat < 3 && vert.isEmpty() ? "here" : "");
+		String vert = Math.abs(up) < 2 ? "" : Math.abs(up) + (up > 0 ? " up" : " down");
+		String across = flat < 3 ? "" : ARROWS[i] + " " + (int) flat + " m";
+		if (across.isEmpty() && vert.isEmpty()) return "here";
+		return across + (!across.isEmpty() && !vert.isEmpty() ? ", " : "") + vert;
 	}
 }

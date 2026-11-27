@@ -27,7 +27,41 @@ In testing (real raids on Hard with Bad Omen V, in a test world) every raid was 
 was never hurt and no raider ever got out of the farm. About one raid in ten leaves a single raider wedged at the top
 for a while; the screen tells you when that happens and where (see below).
 
-## The easy way: /totem auto
+## Seeing what's left
+
+- **Ghost blocks.** Every block still to place shows in the world as a see-through copy of the real block, like a
+  schematic mod: bright where it can go in right now, faint where it still needs something beside it first. The next
+  block to place has a pulsing cyan outline with a short stalk above it. Wrong blocks in the farm's cells are red
+  boxes (break them), blocks that don't belong anywhere in the farm (old scaffolding, a misplaced block) are purple
+  boxes (take them out), and scaffolding the auto-builder left behind is outlined in amber. The **Ghosts** button on
+  the screen switches between everything left, only what can go in now, and off (`/totem ghosts` too).
+- **What's left, on the screen** (`/totem`, or Mod Menu → Totem Builder → Config): a bar for each part of the farm
+  (floor and booth, villager room, support columns, drop walls, pad and lake, water, walls, islands) and every block
+  still needed as its item, with how many you carry next to it, red where you're short. Hover one for the exact count.
+- **Top left while you build:** how far along it is, the next block with its item icon and which way it is, how many
+  wrong or stray blocks there are, and what you're short of.
+
+## On foot: Auto (walk + scaffolding)
+
+No flying needed. Stand on the farm or on a block beside it (or be in the water next to it), have the materials, a
+stack or so of your scaffolding block and a pickaxe, and press **Auto: walk + scaffolding** (or `/totem walk`). It
+plans the farm where you are if there's none yet, then builds it all as a player would: it walks sneaking (so it
+never steps off an edge), steps up, pillars up one column beside the booth with your scaffolding block, bridges
+across to reach the rest, and lets the printer put in every farm block within reach, layer by layer from the bottom so
+it never shuts itself in. It breaks wrong and stray blocks it finds in the farm, pours the lake, finishes the walls
+and islands, then takes every bit of its scaffolding away again, top down, riding its pillar back to the bottom.
+It eats when it's hungry, and it stops and says what's missing if you run out of something; start it again and it
+carries on from where it is. Once the lake is in, if it's ever left with no way down it steps off the edge into the
+sea (landing in water does no damage) and climbs back up.
+
+**Scaffolding block:** cobblestone unless you change it with the **Scaffold** button on the screen (it cycles through
+cobblestone, netherrack, dirt, cobbled deepslate and other plain blocks), or hold the block you want and press
+**Held** (or `/totem scaffold`). It uses a few hundred over the build and takes them all back up.
+
+Its clicks go at the printer's speed (`/totem speed`) and it turns your view to look at what it clicks, the tick
+before, so a server sees nothing a player couldn't do. `/totem stop` stops it.
+
+## Flying: /totem auto
 
 Have the materials on you (and your flight, e.g. elytra fly, switched on), type `/totem auto` and sit back. It looks
 for land in range; if there is any it flies away from it until there's nothing within 107 blocks, plans the farm
@@ -74,7 +108,7 @@ Once the farm is built and the villager sealed in, nothing shows on screen unles
 
 ## Commands
 
-`/totem here` · `/totem check` · `/totem print` · `/totem materials` · `/totem villager` · `/totem status` ·
+`/totem walk` · `/totem stop` · `/totem ghosts` · `/totem scaffold` · `/totem here` · `/totem check` · `/totem print` · `/totem materials` · `/totem villager` · `/totem status` ·
 `/totem speed 1-20` (blocks a second, 5 by default: the rate of holding right-click, which servers with anti-cheat
 accept; much faster can get you kicked) · `/totem forget`
 

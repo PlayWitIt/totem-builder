@@ -57,6 +57,7 @@ final class AutoBuild {
 
 	static void start(MinecraftClient client) {
 		if (client.player == null) return;
+		Walker.stop(client, null);
 		badSpots.clear();
 		skip.clear();
 		start = client.player.getEntityPos();

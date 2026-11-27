@@ -48,6 +48,7 @@ final class Render {
 	private static List<Ghost> ghosts = List.of();
 	private static List<Mark> marks = List.of();
 	private static BlockPos next;
+	private static int age, frames;
 	/** Nearest first, and no more than this: enough for the whole farm round you, light enough for a weak laptop. */
 	private static final int MAX_GHOSTS = 1600, MAX_MARKS = 300;
 	private static final Map<BlockState, List<BlockModelPart>> MODELS = new HashMap<>();
@@ -61,7 +62,7 @@ final class Render {
 			next = null;
 			return;
 		}
-		if (client.world.getTime() % 5 != 0) return;
+		if (++age % 5 != 0) return;
 		Vec3d eye = client.player.getEyePos();
 		double range = Settings.ghostRange;
 		Settings.Ghosts mode = Settings.ghosts;
@@ -109,6 +110,67 @@ final class Render {
 		return s.isOf(Blocks.COBBLESTONE) || s.isOf(Blocks.GLASS);
 	}
 
+	/**
+	 * The see-through blocks and the filled boxes go to the game's render queue (the 1.21.11 way: drawn with the rest
+	 * of the world at the right point of the frame). Called before the entities are queued.
+	 */
+	static void queue(WorldRenderContext context) {
+		MinecraftClient client = MinecraftClient.getInstance();
+		Farm farm = TotemBuilder.farm;
+		if (client.world == null || client.player == null || farm == null || context.commandQueue() == null || context.matrices() == null) return;
+		Vec3d cam = client.gameRenderer.getCamera().getCameraPos();
+		if (cam.squaredDistanceTo(Vec3d.ofCenter(farm.bed)) > 300 * 300) return;
+		List<Ghost> gs = ghosts;
+		List<Mark> ms = marks;
+		MatrixStack matrices = context.matrices();
+		if (!gs.isEmpty()) {
+			context.commandQueue().submitCustom(matrices, RenderLayers.translucentMovingBlock(), (entry, vc) -> ghostQuads(client, entry, vc, gs, cam));
+		}
+		boolean anyFill = false;
+		for (Ghost g : gs) anyFill |= g.state.isOf(Blocks.WATER) || g.state.getBlock() instanceof BedBlock;
+		for (Mark mk : ms) anyFill |= mk.kind != SCAFFOLD;
+		if (anyFill) context.commandQueue().submitCustom(matrices, RenderLayers.debugQuads(), (entry, vc) -> fills(entry, vc, gs, ms, cam));
+	}
+
+	private static void ghostQuads(MinecraftClient client, MatrixStack.Entry base, VertexConsumer vc, List<Ghost> gs, Vec3d cam) {
+		MatrixStack matrices = new MatrixStack();
+		matrices.peek().getPositionMatrix().set(base.getPositionMatrix());
+		matrices.peek().getNormalMatrix().set(base.getNormalMatrix());
+		int light = LightmapTextureManager.MAX_LIGHT_COORDINATE;
+		for (Ghost g : gs) {
+			List<BlockModelPart> parts = MODELS.computeIfAbsent(g.state, st -> client.getBlockRenderManager().getModel(st).getParts(Random.create(42L)));
+			matrices.push();
+			matrices.translate(g.pos.getX() - cam.x, g.pos.getY() - cam.y, g.pos.getZ() - cam.z);
+			// Shrunk a touch, so a ghost never fights with a real block beside it.
+			matrices.translate(0.5, 0.5, 0.5);
+			matrices.scale(0.998f, 0.998f, 0.998f);
+			matrices.translate(-0.5, -0.5, -0.5);
+			MatrixStack.Entry e = matrices.peek();
+			float a = g.now ? 0.75f : 0.4f;
+			float r = g.now ? 1f : 0.75f, gr = g.now ? 1f : 0.85f;
+			for (BlockModelPart part : parts) {
+				for (Direction d : Direction.values()) {
+					if ((g.faces & 1 << d.ordinal()) == 0) continue;
+					for (BakedQuad q : part.getQuads(d)) vc.quad(e, q, r, gr, 1f, a, light, OverlayTexture.DEFAULT_UV);
+				}
+				for (BakedQuad q : part.getQuads(null)) vc.quad(e, q, r, gr, 1f, a, light, OverlayTexture.DEFAULT_UV);
+			}
+			matrices.pop();
+		}
+	}
+
+	/** Filled boxes: water, the bed (no block model of their own), wrong and stray blocks. */
+	private static void fills(MatrixStack.Entry base, VertexConsumer fill, List<Ghost> gs, List<Mark> ms, Vec3d cam) {
+		for (Ghost g : gs) {
+			if (g.state.isOf(Blocks.WATER)) filled(fill, base, g.pos, cam, 0, 0.875, g.now ? 0x703070FF : 0x403070FF);
+			else if (g.state.getBlock() instanceof BedBlock) filled(fill, base, g.pos, cam, 0, 0.5625, g.now ? 0x90FF4040 : 0x50FF4040);
+		}
+		for (Mark mk : ms) {
+			if (mk.kind == WRONG) filled(fill, base, mk.pos, cam, -0.01, 1.02, 0x60FF2020);
+			else if (mk.kind == STRAY) filled(fill, base, mk.pos, cam, -0.01, 1.02, 0x60D030FF);
+		}
+	}
+
 	static void render(WorldRenderContext context) {
 		MinecraftClient client = MinecraftClient.getInstance();
 		Farm farm = TotemBuilder.farm;
@@ -123,54 +185,11 @@ final class Render {
 			own = client.getBufferBuilders().getEntityVertexConsumers();
 			consumers = own;
 		}
-		long time = client.world.getTime();
+		long time = client.world.getTime() + ++frames;
+		if (frames % 200 == 1) TotemBuilder.LOGGER.info("[render] {} ghosts, {} marks, next {}, survey {}, consumers {}", ghosts.size(), marks.size(), next, Survey.latest == null ? null : Survey.latest.extras.size(),
+				consumers.getClass().getName());
 
-		// 1. The ghost blocks, with the real textures.
-		if (!ghosts.isEmpty()) {
-			RenderLayer layer = RenderLayers.translucentMovingBlock();
-			VertexConsumer vc = consumers.getBuffer(layer);
-			int light = LightmapTextureManager.MAX_LIGHT_COORDINATE;
-			for (Ghost g : ghosts) {
-				List<BlockModelPart> parts = MODELS.computeIfAbsent(g.state, st -> client.getBlockRenderManager().getModel(st).getParts(Random.create(42L)));
-				matrices.push();
-				matrices.translate(g.pos.getX() - cam.x, g.pos.getY() - cam.y, g.pos.getZ() - cam.z);
-				// Shrunk a touch, so a ghost never fights with a real block beside it.
-				matrices.translate(0.5, 0.5, 0.5);
-				matrices.scale(0.998f, 0.998f, 0.998f);
-				matrices.translate(-0.5, -0.5, -0.5);
-				MatrixStack.Entry e = matrices.peek();
-				float a = g.now ? 0.62f : 0.28f;
-				float r = g.now ? 1f : 0.75f, gr = g.now ? 1f : 0.85f, b = 1f;
-				for (BlockModelPart part : parts) {
-					for (Direction d : Direction.values()) {
-						if ((g.faces & 1 << d.ordinal()) == 0) continue;
-						for (BakedQuad q : part.getQuads(d)) {
-							vc.quad(e, q, r, gr, b, a, light, OverlayTexture.DEFAULT_UV);
-						}
-					}
-					for (BakedQuad q : part.getQuads(null)) {
-						vc.quad(e, q, r, gr, b, a, light, OverlayTexture.DEFAULT_UV);
-					}
-				}
-				matrices.pop();
-			}
-			if (consumers instanceof VertexConsumerProvider.Immediate im) im.draw(layer);
-		}
-
-		// 2. Filled boxes: water, the bed, wrong and stray blocks.
-		RenderLayer quads = RenderLayers.debugQuads();
-		VertexConsumer fill = consumers.getBuffer(quads);
-		MatrixStack.Entry base = matrices.peek();
-		for (Ghost g : ghosts) {
-			if (g.state.isOf(Blocks.WATER)) filled(fill, base, g.pos, cam, 0, 0.875, g.now ? 0x703070FF : 0x403070FF);
-			else if (g.state.getBlock() instanceof BedBlock) filled(fill, base, g.pos, cam, 0, 0.5625, g.now ? 0x90FF4040 : 0x50FF4040);
-		}
-		for (Mark mk : marks) {
-			if (mk.kind == WRONG) filled(fill, base, mk.pos, cam, -0.01, 1.02, 0x60FF2020);
-			else if (mk.kind == STRAY) filled(fill, base, mk.pos, cam, -0.01, 1.02, 0x60D030FF);
-		}
-		if (consumers instanceof VertexConsumerProvider.Immediate im) im.draw(quads);
-
+		// Lines straight in, as before: they show from this point in the frame.
 		// 3. Lines.
 		VertexConsumer lines = consumers.getBuffer(RenderLayers.lines());
 		MatrixStack.Entry e = matrices.peek();
@@ -206,8 +225,7 @@ final class Render {
 				line(lines, e, p.getX() + 0.5 - cam.x, p.getY() + 1 - cam.y, p.getZ() + 0.5 - cam.z, p.getX() + 0.5 - cam.x, p.getY() + 12 - cam.y, p.getZ() + 0.5 - cam.z, 0xFFFF2020, 3f);
 			}
 		}
-		if (own != null) own.draw();
-		else if (consumers instanceof VertexConsumerProvider.Immediate im) im.draw(RenderLayers.lines());
+		if (own != null) own.draw(RenderLayers.lines());
 	}
 
 	private static double height(BlockState s) {

@@ -63,6 +63,7 @@ public final class Printer {
 	/** The block whose look went to the server this tick: clicked at the end of it. */
 	private record Queued(BlockPos pos, BlockState want, BlockHitResult hit) {}
 	private Queued queued;
+	private int heldOpen;
 
 	/** Trapdoors and fence gates: placed shut, then opened with a click. */
 	static boolean opens(BlockState s) {
@@ -121,6 +122,22 @@ public final class Printer {
 		return !world.getEntitiesByClass(VillagerEntity.class, room.expand(0.2), e -> e.isAlive()).isEmpty();
 	}
 
+	/** Set by the walking auto-builder: which farm blocks may go in now (null: all), and a pause while it works. */
+	static java.util.function.Predicate<BlockPos> allow;
+	static boolean paused;
+
+	/** A gate or trapdoor is to be opened next tick: the click must not be a sneaking one (that would place a block). */
+	boolean opensNext() {
+		return queued != null && needsOpening(queued.want(), MinecraftClient.getInstance().world.getBlockState(queued.pos()));
+	}
+
+	/** One block's worth of the speed limit, for a block the walker puts in itself; false if it must wait. */
+	boolean take() {
+		if (budget < 1) return false;
+		budget -= 1;
+		return true;
+	}
+
 	/** Stop: nothing waiting, your own look back. */
 	public void stop() {
 		queued = null;
@@ -140,7 +157,21 @@ public final class Printer {
 		Queued q = queued;
 		queued = null;
 		Look.clear();
+		if (q != null && needsOpening(q.want(), world.getBlockState(q.pos())) && player.isSneaking()) {
+			// Sneaking, this click would put a block in front of the gate instead of opening it: wait (you're
+			// holding shift yourself: try it again later).
+			if (++heldOpen < 20) {
+				queued = q;
+				face(player, q.hit().getPos());
+			} else {
+				heldOpen = 0;
+				opened.remove(q.pos());
+			}
+			return;
+		}
+		heldOpen = 0;
 		if (q != null) click(client, player, world, farm, q);
+		if (paused) return;
 		pending.values().removeIf(t -> ticks - t > 20);
 		opened.values().removeIf(t -> ticks - t > 20);
 		double reach = player.getBlockInteractionRange() - 0.25;
@@ -159,6 +190,7 @@ public final class Printer {
 		for (Map.Entry<BlockPos, BlockState> e : targets.entrySet()) {
 			BlockPos pos = e.getKey();
 			if (pending.containsKey(pos)) continue;
+			if (allow != null && !allow.test(pos)) continue;
 			if (e.getValue().isOf(Blocks.WATER) && dry) continue;
 			if (Vec3d.ofCenter(pos).squaredDistanceTo(eye) > (reach + 0.8) * (reach + 0.8)) continue;
 			if (need(e.getValue(), world.getBlockState(pos)) != Need.PLACE) continue;
