@@ -708,6 +708,13 @@ final class Walk {
 				List<Step> path = search(feet, base, (f, b, s) -> seaDrop(f) != null, null, false, 20000);
 				if (path != null) return new Job(Act.FALL, null, null, path, "into the sea");
 			}
+			// Down on the sea, cut off from the rest of its scaffolding by water: a bridge across to the nearest (the
+			// bridge is scaffolding too and comes up on the way back).
+			if (!fills && !level.isEmpty()) {
+				BlockPos r = level.get(0);
+				List<Step> path = search(feet, base, (f, b, s) -> canBreakFrom(f, b, r) && safeToBreak(r, f, b), Vec3d.ofCenter(r), true, 30000);
+				if (path != null) return new Job(Act.BREAK, r, null, path, "scaffolding, bridging across");
+			}
 			return new Job(Act.STUCK, level.isEmpty() ? null : level.get(0), null, List.of(), "can't reach the scaffolding at "
 					+ (level.isEmpty() ? "?" : level.get(0).toShortString()));
 		}

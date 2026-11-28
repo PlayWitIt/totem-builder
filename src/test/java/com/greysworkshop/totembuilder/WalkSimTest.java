@@ -317,7 +317,10 @@ class WalkSimTest {
 		}
 
 		void report(String name, String end, long ms) {
-			if (!end.equals("done")) for (String t : trail) System.out.println("  trail: " + t);
+			if (!end.equals("done")) {
+				for (String t : trail) System.out.println("  trail: " + t);
+				System.out.println("  scaffolding left: " + farm.scaffold.stream().map(q -> q.subtract(farm.bed).toShortString()).sorted().toList());
+			}
 			Survey s = Survey.of(world, farm);
 			System.out.println(name + ": " + end + " in " + jobs + " jobs, " + moves + " moves (" + pillars + " pillar, " + digs + " dig), "
 					+ scaffoldPlaced + " scaffolding placed, " + tunnels + " tunnels, " + falls + " falls into the sea, " + boots + " climbs out, " + farm.scaffold.size() + " left, " + s.extras.size() + " extras, " + ms + " ms");
